@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "adaptive-chess-teacher"
+version = "0.1.0"
+description = "A fully local browser chess game against Stockfish."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Adaptive Chess Teacher contributors" }]
+dependencies = [
+    "fastapi==0.115.12",
+    "pydantic==2.11.4",
+    "pydantic-settings==2.9.1",
+    "python-chess==1.999",
+    "uvicorn[standard]==0.34.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx==0.28.1",
+    "pytest==8.3.5",
+]
+
+[project.scripts]
+voicechess = "voicechess.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/voicechess"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+

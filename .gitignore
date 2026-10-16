@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Adaptive Chess Teacher local runtime output
+logs/
+exports/
+*.pgn
+
+# Local planning documents
+docs/
