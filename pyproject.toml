@@ -18,12 +18,6 @@ dependencies = [
     "uvicorn[standard]==0.34.2",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "httpx==0.28.1",
-    "pytest==8.3.5",
-]
-
 [project.scripts]
 voicechess = "voicechess.__main__:main"
 
@@ -33,4 +27,30 @@ packages = ["src/voicechess"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+strict = true
+warn_unused_configs = true
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "mypy==1.15.0",
+    "pytest==8.3.5",
+    "ruff==0.11.13",
+]
 
