@@ -80,6 +80,11 @@ or set them in the shell before starting the application.
 | Log level | `VOICECHESS_LOG_LEVEL` | `INFO` |
 | Log file | `VOICECHESS_LOG_DESTINATION` | `logs/voicechess.jsonl` |
 
+Application logs use JSON Lines (`.jsonl`): one structured, append-only JSON event
+per line. This preserves queryable fields such as timestamps, log level, event name,
+game ID, state transitions, latency, and safe error details without making log writes
+depend on a single valid JSON document.
+
 For example, set an explicit Stockfish location and a gentler engine strength on
 Windows:
 
