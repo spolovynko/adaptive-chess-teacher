@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -47,10 +48,13 @@ def test_log_event_writes_structured_metadata(
 
     event = read_events(destination)[0]
     assert event["event"] == "player_move_applied"
+    assert event["level"] == "INFO"
+    assert event["logger"] == "voicechess"
     assert event["game_id"] == "game-123"
     assert event["duration_ms"] == 12.346
     assert event["metadata"] == {"san": "e4"}
     assert event["timestamp"].endswith("Z")
+    assert datetime.fromisoformat(str(event["timestamp"]).replace("Z", "+00:00")).tzinfo
 
 
 def test_state_transition_has_game_and_state_context(

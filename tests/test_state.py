@@ -10,7 +10,45 @@ import pytest
 
 from voicechess.config import Settings
 from voicechess.logging import configure_logging, reset_logging
-from voicechess.state import GameState, GameStateMachine, InvalidStateTransition
+from voicechess.state import (
+    ALLOWED_TRANSITIONS,
+    GameState,
+    GameStateMachine,
+    InvalidStateTransition,
+)
+
+PATH_TO_STATE: dict[GameState, tuple[GameState, ...]] = {
+    GameState.IDLE: (),
+    GameState.PLAYER_INPUT: (GameState.PLAYER_INPUT,),
+    GameState.RESOLVING: (GameState.PLAYER_INPUT, GameState.RESOLVING),
+    GameState.APPLYING_PLAYER_MOVE: (
+        GameState.PLAYER_INPUT,
+        GameState.RESOLVING,
+        GameState.APPLYING_PLAYER_MOVE,
+    ),
+    GameState.ENGINE_TURN: (
+        GameState.PLAYER_INPUT,
+        GameState.RESOLVING,
+        GameState.APPLYING_PLAYER_MOVE,
+        GameState.ENGINE_TURN,
+    ),
+    GameState.APPLYING_ENGINE_MOVE: (
+        GameState.PLAYER_INPUT,
+        GameState.RESOLVING,
+        GameState.APPLYING_PLAYER_MOVE,
+        GameState.ENGINE_TURN,
+        GameState.APPLYING_ENGINE_MOVE,
+    ),
+    GameState.RETURNING_SNAPSHOT: (
+        GameState.PLAYER_INPUT,
+        GameState.RESOLVING,
+        GameState.APPLYING_PLAYER_MOVE,
+        GameState.ENGINE_TURN,
+        GameState.APPLYING_ENGINE_MOVE,
+        GameState.RETURNING_SNAPSHOT,
+    ),
+    GameState.GAME_OVER: (GameState.GAME_OVER,),
+}
 
 
 @pytest.fixture
@@ -117,3 +155,30 @@ def test_engine_failure_can_return_to_player_input(
 
     assert machine.state is GameState.PLAYER_INPUT
     assert read_events(destination)[-1]["state_from"] == "ENGINE_TURN"
+
+
+@pytest.mark.parametrize(
+    ("state_from", "state_to"),
+    [
+        (state_from, state_to)
+        for state_from, destinations in ALLOWED_TRANSITIONS.items()
+        for state_to in destinations
+    ],
+)
+def test_every_declared_transition_is_accepted(
+    machine_and_destination: tuple[GameStateMachine, Path],
+    state_from: GameState,
+    state_to: GameState,
+) -> None:
+    machine, destination = machine_and_destination
+    for state in PATH_TO_STATE[state_from]:
+        machine.transition_to(state)
+
+    machine.transition_to(state_to)
+
+    event = read_events(destination)[-1]
+    assert machine.state is state_to
+    assert event["event"] == "state_transition"
+    assert event["game_id"] == "game-123"
+    assert event["state_from"] == state_from.value
+    assert event["state_to"] == state_to.value

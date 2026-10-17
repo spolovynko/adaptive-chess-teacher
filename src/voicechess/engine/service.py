@@ -213,8 +213,15 @@ class StockfishService:
 
             self._engine = None
             started_at = perf_counter()
+            already_terminated = False
             try:
                 engine.quit()
+            except chess.engine.EngineTerminatedError:
+                # On Windows, Ctrl+C can reach the child process before the
+                # application sends UCI "quit". The process is already stopped,
+                # so only its local transport resources still need cleanup.
+                already_terminated = True
+                self._close_without_raising(engine)
             except Exception as exc:
                 self._close_without_raising(engine)
                 error = StockfishShutdownError()
@@ -232,6 +239,7 @@ class StockfishService:
                 logging.INFO,
                 "stockfish_stopped",
                 duration_ms=(perf_counter() - started_at) * 1_000,
+                metadata={"already_terminated": already_terminated},
             )
 
     def _parse_position(self, fen: str, game_id: str | None) -> chess.Board:

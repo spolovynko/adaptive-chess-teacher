@@ -16,7 +16,7 @@ from voicechess.config import Settings
 from voicechess.engine import StockfishMoveTimeoutError, StockfishStartupError
 from voicechess.game import GameSnapshot
 from voicechess.logging import configure_logging, reset_logging
-from voicechess.pgn import PgnExportResult
+from voicechess.pgn import PgnExportResult, PgnWriteError
 
 
 class FakeEngineService:
@@ -53,6 +53,11 @@ class FakeEngineService:
 class BrokenExporter:
     def export(self, snapshot: GameSnapshot) -> PgnExportResult:
         raise RuntimeError(f"do not expose path for {snapshot.game_id}")
+
+
+class ControlledBrokenExporter:
+    def export(self, snapshot: GameSnapshot) -> PgnExportResult:
+        raise PgnWriteError
 
 
 @dataclass(slots=True)
@@ -148,13 +153,19 @@ def test_valid_san_runs_complete_player_and_engine_turn(api_context: ApiTestCont
     assert engine_board.piece_at(chess.E4) == chess.Piece(chess.PAWN, chess.WHITE)
 
 
-def test_illegal_san_returns_controlled_error_and_preserves_game(
+@pytest.mark.parametrize(
+    ("san", "error_code"),
+    [("horse to e4", "invalid_san"), ("e5", "illegal_move")],
+)
+def test_rejected_san_returns_controlled_error_and_preserves_game(
     api_context: ApiTestContext,
+    san: str,
+    error_code: str,
 ) -> None:
-    response = api_context.client.post("/api/game/move", json={"san": "e5"})
+    response = api_context.client.post("/api/game/move", json={"san": san})
 
     assert response.status_code == 400
-    assert response.json()["error"]["code"] == "illegal_move"
+    assert response.json()["error"]["code"] == error_code
     snapshot = api_context.client.get("/api/game").json()
     assert snapshot["moves"] == []
     assert snapshot["state"] == "PLAYER_INPUT"
@@ -231,6 +242,18 @@ def test_new_game_and_resignation_routes_return_snapshots(api_context: ApiTestCo
     assert replacement["moves"] == []
 
 
+def test_finished_game_rejects_further_actions(api_context: ApiTestContext) -> None:
+    api_context.client.post("/api/game/resign")
+
+    move = api_context.client.post("/api/game/move", json={"san": "e4"})
+    resign = api_context.client.post("/api/game/resign")
+
+    assert move.status_code == 409
+    assert move.json()["error"]["code"] == "game_not_active"
+    assert resign.status_code == 409
+    assert resign.json()["error"]["code"] == "game_not_active"
+
+
 def test_export_route_returns_download_data_and_writes_file(api_context: ApiTestContext) -> None:
     api_context.client.post("/api/game/move", json={"san": "e4"})
 
@@ -246,7 +269,8 @@ def test_export_route_returns_download_data_and_writes_file(api_context: ApiTest
 
 
 def test_unexpected_errors_return_generic_message_without_leaking_details(tmp_path: Path) -> None:
-    settings = Settings(log_destination=tmp_path / "voicechess.jsonl")
+    log_destination = tmp_path / "voicechess.jsonl"
+    settings = Settings(log_destination=log_destination)
     logger = configure_logging(settings)
     engine = FakeEngineService()
     exporter: ExportService = BrokenExporter()
@@ -263,6 +287,33 @@ def test_unexpected_errors_return_generic_message_without_leaking_details(tmp_pa
         }
     }
     assert "do not expose" not in response.text
+    unexpected = next(
+        event
+        for event in read_events(log_destination)
+        if event["event"] == "unexpected_application_error"
+    )
+    assert unexpected["game_id"]
+    assert unexpected["error"]["type"] == "RuntimeError"
+    reset_logging(logger)
+
+
+def test_controlled_pgn_failure_uses_stable_error_envelope(tmp_path: Path) -> None:
+    settings = Settings(log_destination=tmp_path / "voicechess.jsonl")
+    logger = configure_logging(settings)
+    engine = FakeEngineService()
+    exporter: ExportService = ControlledBrokenExporter()
+    app = create_app(settings=settings, logger=logger, engine=engine, pgn=exporter)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/api/game/export")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "pgn_export_failed",
+            "message": "The PGN file could not be written.",
+        }
+    }
     reset_logging(logger)
 
 
@@ -271,5 +322,6 @@ def test_http_requests_are_timed_in_structured_logs(api_context: ApiTestContext)
 
     event = read_events(api_context.log_destination)[-1]
     assert event["event"] == "http_request_completed"
+    assert event["game_id"]
     assert event["metadata"] == {"method": "GET", "path": "/api/game", "status": 200}
     assert event["duration_ms"] >= 0

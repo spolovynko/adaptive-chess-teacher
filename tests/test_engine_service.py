@@ -197,6 +197,39 @@ def test_select_move_uses_fen_and_configured_search_limits(
     }
     assert events[-1]["event"] == "stockfish_move_selected"
     assert events[-1]["metadata"] == {"uci": "e7e5"}
+    assert events[-1]["game_id"] == "game-123"
+    assert events[-1]["duration_ms"] >= 0
+
+
+@pytest.mark.parametrize(
+    ("depth", "move_time_ms", "expected_depth", "expected_time"),
+    [
+        (12, None, 12, None),
+        (None, 250, None, 0.25),
+    ],
+)
+def test_search_limit_supports_depth_or_time_independently(
+    tmp_path: Path,
+    logger_and_destination: tuple[logging.Logger, Path],
+    depth: int | None,
+    move_time_ms: int | None,
+    expected_depth: int | None,
+    expected_time: float | None,
+) -> None:
+    logger, _ = logger_and_destination
+    engine = FakeEngine(chess.Move.from_uci("e2e4"))
+    service, _ = started_service(
+        tmp_path,
+        logger,
+        engine,
+        engine_search_depth=depth,
+        engine_move_time_ms=move_time_ms,
+    )
+
+    service.select_move(chess.STARTING_FEN)
+
+    assert engine.play_limits[0].depth == expected_depth
+    assert engine.play_limits[0].time == expected_time
 
 
 def test_selected_move_integrates_with_game_controller(
@@ -323,6 +356,7 @@ def test_move_timeout_closes_and_invalidates_engine(
     event = read_events(destination)[-1]
     assert event["event"] == "stockfish_move_timeout"
     assert event["game_id"] == "game-123"
+    assert event["duration_ms"] >= 100
 
 
 @pytest.mark.parametrize(
@@ -391,7 +425,28 @@ def test_stop_quits_engine_and_is_safe_to_repeat(
 
     assert not service.is_running
     assert engine.quit_calls == 1
-    assert [event["event"] for event in read_events(destination)][-1] == "stockfish_stopped"
+    event = read_events(destination)[-1]
+    assert event["event"] == "stockfish_stopped"
+    assert event["metadata"] == {"already_terminated": False}
+
+
+def test_stop_treats_an_already_terminated_engine_as_stopped(
+    tmp_path: Path,
+    logger_and_destination: tuple[logging.Logger, Path],
+) -> None:
+    logger, destination = logger_and_destination
+    engine = FakeEngine()
+    engine.quit_error = chess.engine.EngineTerminatedError("engine already exited")
+    service, _ = started_service(tmp_path, logger, engine)
+
+    service.stop()
+
+    assert not service.is_running
+    assert engine.quit_calls == 1
+    assert engine.close_calls == 1
+    event = read_events(destination)[-1]
+    assert event["event"] == "stockfish_stopped"
+    assert event["metadata"] == {"already_terminated": True}
 
 
 def test_shutdown_failure_force_closes_and_invalidates_engine(

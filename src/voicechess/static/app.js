@@ -1,12 +1,14 @@
 "use strict";
 
+// Both colours use the solid glyphs; CSS colours them. Solid shapes read far
+// better than the outline set, which looks hollow on light squares.
 const PIECES = Object.freeze({
-  K: { glyph: "♔", name: "white king", color: "white" },
-  Q: { glyph: "♕", name: "white queen", color: "white" },
-  R: { glyph: "♖", name: "white rook", color: "white" },
-  B: { glyph: "♗", name: "white bishop", color: "white" },
-  N: { glyph: "♘", name: "white knight", color: "white" },
-  P: { glyph: "♙", name: "white pawn", color: "white" },
+  K: { glyph: "♚", name: "white king", color: "white" },
+  Q: { glyph: "♛", name: "white queen", color: "white" },
+  R: { glyph: "♜", name: "white rook", color: "white" },
+  B: { glyph: "♝", name: "white bishop", color: "white" },
+  N: { glyph: "♞", name: "white knight", color: "white" },
+  P: { glyph: "♟", name: "white pawn", color: "white" },
   k: { glyph: "♚", name: "black king", color: "black" },
   q: { glyph: "♛", name: "black queen", color: "black" },
   r: { glyph: "♜", name: "black rook", color: "black" },
@@ -14,6 +16,10 @@ const PIECES = Object.freeze({
   n: { glyph: "♞", name: "black knight", color: "black" },
   p: { glyph: "♟", name: "black pawn", color: "black" },
 });
+
+// Variation selector 15: asks for the text glyph, not the emoji pawn some
+// platforms substitute for U+265F.
+const TEXT_PRESENTATION = String.fromCodePoint(0xfe0e);
 
 const FILES = Object.freeze(["a", "b", "c", "d", "e", "f", "g", "h"]);
 const RANKS = Object.freeze([8, 7, 6, 5, 4, 3, 2, 1]);
@@ -100,6 +106,7 @@ function renderSnapshot(game) {
 
   const turn = game.side_to_move === "white" ? "White" : "Black";
   elements.turnChip.textContent = game.status === "active" ? `${turn} to move` : "Game over";
+  elements.turnChip.dataset.side = game.status === "active" ? game.side_to_move : "over";
   elements.stateLabel.textContent = humanize(game.state);
   elements.statusMessage.textContent = game.message;
   elements.lastMove.textContent = game.last_move
@@ -124,7 +131,8 @@ function renderBoard(board) {
       if (piece) {
         const glyph = document.createElement("span");
         glyph.className = `piece piece-${piece.color}`;
-        glyph.textContent = piece.glyph;
+        // U+FE0E asks for the text glyph, not the emoji pawn some platforms substitute.
+        glyph.textContent = piece.glyph + TEXT_PRESENTATION;
         glyph.setAttribute("aria-hidden", "true");
         square.appendChild(glyph);
       }

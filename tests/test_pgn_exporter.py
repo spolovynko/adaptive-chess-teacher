@@ -20,6 +20,7 @@ from voicechess.logging import configure_logging, reset_logging
 from voicechess.pgn import (
     InconsistentGameSnapshotError,
     InvalidGameHistoryError,
+    InvalidPgnError,
     PgnExporter,
     PgnWriteError,
 )
@@ -216,6 +217,28 @@ def test_history_that_disagrees_with_fen_is_rejected(
 
     with pytest.raises(InconsistentGameSnapshotError):
         make_exporter(tmp_path, logger).export(snapshot)
+
+    event = read_events(logger_and_destination[1])[-1]
+    assert event["event"] == "pgn_export_failed"
+    assert event["game_id"] == str(TEST_GAME_ID)
+    assert event["duration_ms"] >= 0
+
+
+def test_generated_pgn_that_cannot_be_parsed_is_rejected_and_logged(
+    tmp_path: Path,
+    logger_and_destination: tuple[logging.Logger, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    logger, destination = logger_and_destination
+    monkeypatch.setattr(chess.pgn, "read_game", lambda _: None)
+
+    with pytest.raises(InvalidPgnError):
+        make_exporter(tmp_path, logger).export(make_game(logger).snapshot())
+
+    assert not (tmp_path / "exports").exists()
+    event = read_events(destination)[-1]
+    assert event["event"] == "pgn_export_failed"
+    assert event["error"]["type"] == "InvalidPgnError"
 
 
 def test_write_failure_is_controlled_and_logged(

@@ -1,9 +1,20 @@
 """Tests for configuration defaults, overrides, and validation."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from voicechess.config import Settings, get_settings
+
+
+@pytest.fixture(autouse=True)
+def isolate_tests_from_project_dotenv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep local developer settings from changing configuration unit tests."""
+    monkeypatch.chdir(tmp_path)
 
 
 def test_defaults_are_local_and_ready_for_phase_zero() -> None:

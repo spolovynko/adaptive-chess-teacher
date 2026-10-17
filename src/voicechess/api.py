@@ -150,6 +150,7 @@ def create_app(
                 active_logger,
                 logging.ERROR,
                 "http_request_completed",
+                game_id=_request_game_id(request, services),
                 duration_ms=(perf_counter() - started_at) * 1_000,
                 metadata={"method": request.method, "path": request.url.path, "status": 500},
                 error=exc,
@@ -162,6 +163,7 @@ def create_app(
             active_logger,
             logging.INFO,
             "http_request_completed",
+            game_id=_request_game_id(request, services),
             duration_ms=duration_ms,
             metadata={
                 "method": request.method,
@@ -198,7 +200,13 @@ def create_app(
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(_: Request, error: Exception) -> JSONResponse:
-        log_event(active_logger, logging.ERROR, "unexpected_application_error", error=error)
+        log_event(
+            active_logger,
+            logging.ERROR,
+            "unexpected_application_error",
+            game_id=services.game.game_id,
+            error=error,
+        )
         return _error_response(
             500,
             "internal_error",
@@ -263,6 +271,13 @@ def create_app(
         return PgnExportResponse.from_result(services.pgn.export(snapshot))
 
     return app
+
+
+def _request_game_id(request: Request, services: ApplicationServices) -> str | None:
+    """Attach game context only to routes that operate on the current game."""
+    if request.url.path == "/api/game" or request.url.path.startswith("/api/game/"):
+        return services.game.game_id
+    return None
 
 
 def _error_response(status_code: int, code: str, error: BaseException) -> JSONResponse:
