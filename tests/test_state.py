@@ -89,18 +89,16 @@ def test_game_over_is_reachable_from_an_active_stage(
     assert event["state_to"] == "GAME_OVER"
 
 
-def test_reset_returns_interrupted_game_to_player_input(
+def test_rejected_resolution_can_return_to_player_input(
     machine_and_destination: tuple[GameStateMachine, Path],
 ) -> None:
     machine, destination = machine_and_destination
     machine.start()
+    machine.transition_to(GameState.RESOLVING)
 
-    machine.reset()
+    machine.transition_to(GameState.PLAYER_INPUT)
 
     events = read_events(destination)
     assert machine.state is GameState.PLAYER_INPUT
-    assert [(event["state_from"], event["state_to"]) for event in events[-3:]] == [
-        ("PLAYER_INPUT", "GAME_OVER"),
-        ("GAME_OVER", "IDLE"),
-        ("IDLE", "PLAYER_INPUT"),
-    ]
+    assert events[-1]["state_from"] == "RESOLVING"
+    assert events[-1]["state_to"] == "PLAYER_INPUT"

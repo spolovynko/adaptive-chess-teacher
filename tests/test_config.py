@@ -36,6 +36,11 @@ def test_invalid_engine_skill_level_is_rejected() -> None:
         Settings(stockfish_skill_level=21)
 
 
+def test_at_least_one_engine_search_limit_is_required() -> None:
+    with pytest.raises(ValidationError, match="at least one engine search limit"):
+        Settings(engine_search_depth=None, engine_move_time_ms=None)
+
+
 def test_non_local_host_is_rejected() -> None:
     with pytest.raises(ValidationError, match="local address"):
         Settings(app_host="0.0.0.0")

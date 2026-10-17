@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -35,3 +36,12 @@ class GameResult(str, Enum):
     WHITE_WIN = "1-0"
     BLACK_WIN = "0-1"
     DRAW = "1/2-1/2"
+
+
+@dataclass(frozen=True, slots=True)
+class GameOutcome:
+    """A terminal status, result, and user-facing explanation."""
+
+    status: GameStatus
+    result: GameResult
+    message: str

@@ -12,8 +12,9 @@ voice and coaching capabilities.
 ## Setup
 
 This project uses [uv](https://docs.astral.sh/uv/) to resolve dependencies, create the
-local virtual environment, and maintain the committed `uv.lock` file. Install uv if it
-is not already available:
+local virtual environment, and maintain the committed `uv.lock` file. Follow the
+[official installation instructions](https://docs.astral.sh/uv/getting-started/installation/)
+for your platform. On Windows, Winget can install it directly:
 
 ```powershell
 winget install --id Astral.uv -e
@@ -101,6 +102,13 @@ Reserved, currently unused settings are available for future phases:
 `VOICECHESS_WHISPER_MODEL_NAME`, `VOICECHESS_PIPER_VOICE_NAME`,
 `VOICECHESS_LOCAL_LLM_MODEL_NAME`, and the three `VOICECHESS_COACHING_*_THRESHOLD_CP`
 values.
+
+## Phase 0 game rules
+
+The player controls White and Stockfish controls Black. Checkmate, stalemate,
+insufficient material, the seventy-five-move rule, and fivefold repetition end the
+game automatically. Claimable draws, such as threefold repetition and the fifty-move
+rule, are not claimed automatically because Phase 0 does not expose a draw-claim action.
 
 ## Phase 0 boundaries
 

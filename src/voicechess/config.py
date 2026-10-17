@@ -58,6 +58,14 @@ class Settings(BaseSettings):
         return normalized
 
     @model_validator(mode="after")
+    def engine_search_must_be_bounded(self) -> Self:
+        """Require a normal search bound in addition to the failure timeout."""
+        if self.engine_search_depth is None and self.engine_move_time_ms is None:
+            message = "Configure at least one engine search limit: depth or move time."
+            raise ValueError(message)
+        return self
+
+    @model_validator(mode="after")
     def coaching_thresholds_must_increase(self) -> Self:
         """Reserve a sensible classification order for the future coaching phase."""
         thresholds = (

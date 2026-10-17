@@ -24,7 +24,9 @@ class GameState(str, Enum):
 ALLOWED_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
     GameState.IDLE: frozenset({GameState.PLAYER_INPUT, GameState.GAME_OVER}),
     GameState.PLAYER_INPUT: frozenset({GameState.RESOLVING, GameState.GAME_OVER}),
-    GameState.RESOLVING: frozenset({GameState.APPLYING_PLAYER_MOVE, GameState.GAME_OVER}),
+    GameState.RESOLVING: frozenset(
+        {GameState.APPLYING_PLAYER_MOVE, GameState.PLAYER_INPUT, GameState.GAME_OVER}
+    ),
     GameState.APPLYING_PLAYER_MOVE: frozenset({GameState.ENGINE_TURN, GameState.GAME_OVER}),
     GameState.ENGINE_TURN: frozenset({GameState.APPLYING_ENGINE_MOVE, GameState.GAME_OVER}),
     GameState.APPLYING_ENGINE_MOVE: frozenset({GameState.RETURNING_SNAPSHOT, GameState.GAME_OVER}),
@@ -91,10 +93,3 @@ class GameStateMachine:
     def mark_game_over(self) -> GameState:
         """End the active or interrupted game from any lifecycle stage."""
         return self.transition_to(GameState.GAME_OVER)
-
-    def reset(self) -> GameState:
-        """Return an ended or interrupted game to the player-input state."""
-        if self._state is not GameState.GAME_OVER:
-            self.mark_game_over()
-        self.transition_to(GameState.IDLE)
-        return self.start()

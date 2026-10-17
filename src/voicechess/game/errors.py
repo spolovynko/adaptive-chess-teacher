@@ -18,6 +18,20 @@ class MoveInputError(GameError):
     """Base exception for a rejected player move submission."""
 
 
+class PlayerMoveNotExpectedError(GameError):
+    """Raised when the application is not ready for a player move."""
+
+    def __init__(self) -> None:
+        super().__init__("A player move is not expected right now.")
+
+
+class EngineMoveNotExpectedError(GameError):
+    """Raised when the application is not waiting for an engine move."""
+
+    def __init__(self) -> None:
+        super().__init__("An engine move is not expected right now.")
+
+
 class EmptySanError(MoveInputError):
     """Raised when the player submits no SAN move text."""
 
@@ -44,5 +58,9 @@ class IllegalSanMoveError(MoveInputError):
 class IllegalEngineMoveError(GameError):
     """Raised when the engine boundary supplies an illegal move."""
 
-    def __init__(self) -> None:
-        super().__init__("The engine returned an illegal move.")
+    def __init__(self, move: str | None = None) -> None:
+        self.move = move
+        message = "The engine returned an illegal move."
+        if move is not None:
+            message = f"The engine returned an illegal move: {move}."
+        super().__init__(message)

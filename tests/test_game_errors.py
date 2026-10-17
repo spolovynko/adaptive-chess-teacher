@@ -4,12 +4,14 @@ import pytest
 
 from voicechess.game import (
     EmptySanError,
+    EngineMoveNotExpectedError,
     GameError,
     GameNotActiveError,
     IllegalEngineMoveError,
     IllegalSanMoveError,
     InvalidSanError,
     MoveInputError,
+    PlayerMoveNotExpectedError,
 )
 
 
@@ -21,6 +23,8 @@ from voicechess.game import (
         (InvalidSanError("horse to e4"), "not valid"),
         (IllegalSanMoveError("Qh5"), "not a legal move"),
         (IllegalEngineMoveError(), "engine returned an illegal move"),
+        (PlayerMoveNotExpectedError(), "player move is not expected"),
+        (EngineMoveNotExpectedError(), "engine move is not expected"),
     ],
 )
 def test_game_errors_have_user_safe_messages(error: GameError, message: str) -> None:
