@@ -85,6 +85,10 @@ per line. This preserves queryable fields such as timestamps, log level, event n
 game ID, state transitions, latency, and safe error details without making log writes
 depend on a single valid JSON document.
 
+Every accepted game-lifecycle change is recorded as an `INFO` `state_transition` event.
+Rejected transitions are recorded as `WARNING` `state_transition_rejected` events and
+leave the current state unchanged.
+
 For example, set an explicit Stockfish location and a gentler engine strength on
 Windows:
 
