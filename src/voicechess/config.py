@@ -63,6 +63,12 @@ class Settings(BaseSettings):
         if self.engine_search_depth is None and self.engine_move_time_ms is None:
             message = "Configure at least one engine search limit: depth or move time."
             raise ValueError(message)
+        if (
+            self.engine_move_time_ms is not None
+            and self.engine_move_time_ms >= self.engine_move_timeout_ms
+        ):
+            message = "Engine move time must be shorter than the engine move timeout."
+            raise ValueError(message)
         return self
 
     @model_validator(mode="after")

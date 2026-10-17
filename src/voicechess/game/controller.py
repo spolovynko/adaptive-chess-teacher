@@ -183,6 +183,27 @@ class GameController:
             self._state_machine.transition_to(GameState.PLAYER_INPUT)
         return canonical_san
 
+    def recover_from_engine_failure(self) -> None:
+        """Roll back the pending player move after an engine request fails."""
+        self._ensure_active("engine_failure_recovery")
+        if self.state is not GameState.ENGINE_TURN or self.side_to_move is self.player_color:
+            error = EngineMoveNotExpectedError()
+            self._log_rejected_action("engine_recovery_rejected", error)
+            raise error
+
+        rolled_back_san = self._moves.pop()
+        self._board.pop()
+        self._last_move = self._moves[-1] if self._moves else None
+        self._message = "White to move. Please try again."
+        self._state_machine.transition_to(GameState.PLAYER_INPUT)
+        log_event(
+            self._logger,
+            logging.WARNING,
+            "engine_turn_recovered",
+            game_id=self.game_id,
+            metadata={"rolled_back_san": rolled_back_san},
+        )
+
     def resign(self) -> None:
         """End the active game as a player resignation."""
         self._ensure_active("resign")

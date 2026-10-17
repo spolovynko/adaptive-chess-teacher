@@ -3,30 +3,38 @@
 from __future__ import annotations
 
 import argparse
-from importlib import import_module
-from typing import Any, cast
+
+import uvicorn
+
+from voicechess.api import create_app
+from voicechess.config import Settings, get_settings
 
 
 def main() -> None:
-    """Run the local Voice Chess Coach server once its API is implemented."""
-    parser = argparse.ArgumentParser(description="Run the local Voice Chess Coach server.")
-    parser.add_argument("--host", default="127.0.0.1", help="Interface to bind.")
-    parser.add_argument("--port", type=int, default=8000, help="Port to bind.")
+    """Run the local Adaptive Chess Teacher server."""
+    configured = get_settings()
+    parser = argparse.ArgumentParser(description="Run the local Adaptive Chess Teacher server.")
+    parser.add_argument(
+        "--host",
+        choices=("127.0.0.1", "localhost", "::1"),
+        default=configured.app_host,
+        help="Local interface to bind.",
+    )
+    parser.add_argument("--port", type=int, default=configured.app_port, help="Port to bind.")
     args = parser.parse_args()
 
-    try:
-        api_module = import_module("voicechess.api")
-    except ModuleNotFoundError as exc:
-        if exc.name == "voicechess.api":
-            parser.error(
-                "The web API has not been implemented yet; it is scheduled for Phase 0 Step 10."
-            )
-        raise
-
-    import uvicorn
-
-    app: Any = cast(Any, api_module).app
-    uvicorn.run(app, host=args.host, port=args.port)
+    runtime_settings = Settings(
+        **{
+            **configured.model_dump(),
+            "app_host": args.host,
+            "app_port": args.port,
+        }
+    )
+    uvicorn.run(
+        create_app(settings=runtime_settings),
+        host=runtime_settings.app_host,
+        port=runtime_settings.app_port,
+    )
 
 
 if __name__ == "__main__":

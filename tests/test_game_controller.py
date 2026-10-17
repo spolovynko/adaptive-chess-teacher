@@ -173,6 +173,37 @@ def test_illegal_engine_move_preserves_position(
     assert game.state is GameState.ENGINE_TURN
 
 
+def test_engine_failure_recovery_rolls_back_pending_player_move(
+    logger_and_destination: tuple[logging.Logger, Path],
+) -> None:
+    logger, destination = logger_and_destination
+    game = GameController(logger=logger, game_id_factory=lambda: TEST_GAME_ID)
+    original_fen = game.fen
+    game.submit_player_san("e4")
+
+    game.recover_from_engine_failure()
+
+    assert game.fen == original_fen
+    assert game.moves == ()
+    assert game.last_move is None
+    assert game.side_to_move is PlayerColor.WHITE
+    assert game.state is GameState.PLAYER_INPUT
+    assert game.message == "White to move. Please try again."
+    assert read_events(destination)[-1]["event"] == "engine_turn_recovered"
+
+
+def test_engine_failure_recovery_is_rejected_outside_engine_turn(
+    logger_and_destination: tuple[logging.Logger, Path],
+) -> None:
+    logger, _ = logger_and_destination
+    game = GameController(logger=logger, game_id_factory=lambda: TEST_GAME_ID)
+
+    with pytest.raises(EngineMoveNotExpectedError):
+        game.recover_from_engine_failure()
+
+    assert game.state is GameState.PLAYER_INPUT
+
+
 def test_engine_move_is_rejected_when_player_input_is_expected(
     logger_and_destination: tuple[logging.Logger, Path],
 ) -> None:

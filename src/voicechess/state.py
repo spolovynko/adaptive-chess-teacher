@@ -28,7 +28,9 @@ ALLOWED_TRANSITIONS: dict[GameState, frozenset[GameState]] = {
         {GameState.APPLYING_PLAYER_MOVE, GameState.PLAYER_INPUT, GameState.GAME_OVER}
     ),
     GameState.APPLYING_PLAYER_MOVE: frozenset({GameState.ENGINE_TURN, GameState.GAME_OVER}),
-    GameState.ENGINE_TURN: frozenset({GameState.APPLYING_ENGINE_MOVE, GameState.GAME_OVER}),
+    GameState.ENGINE_TURN: frozenset(
+        {GameState.APPLYING_ENGINE_MOVE, GameState.PLAYER_INPUT, GameState.GAME_OVER}
+    ),
     GameState.APPLYING_ENGINE_MOVE: frozenset({GameState.RETURNING_SNAPSHOT, GameState.GAME_OVER}),
     GameState.RETURNING_SNAPSHOT: frozenset({GameState.PLAYER_INPUT, GameState.GAME_OVER}),
     GameState.GAME_OVER: frozenset({GameState.IDLE}),

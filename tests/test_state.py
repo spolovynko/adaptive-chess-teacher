@@ -102,3 +102,18 @@ def test_rejected_resolution_can_return_to_player_input(
     assert machine.state is GameState.PLAYER_INPUT
     assert events[-1]["state_from"] == "RESOLVING"
     assert events[-1]["state_to"] == "PLAYER_INPUT"
+
+
+def test_engine_failure_can_return_to_player_input(
+    machine_and_destination: tuple[GameStateMachine, Path],
+) -> None:
+    machine, destination = machine_and_destination
+    machine.start()
+    machine.transition_to(GameState.RESOLVING)
+    machine.transition_to(GameState.APPLYING_PLAYER_MOVE)
+    machine.transition_to(GameState.ENGINE_TURN)
+
+    machine.transition_to(GameState.PLAYER_INPUT)
+
+    assert machine.state is GameState.PLAYER_INPUT
+    assert read_events(destination)[-1]["state_from"] == "ENGINE_TURN"

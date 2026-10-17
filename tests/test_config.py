@@ -41,6 +41,11 @@ def test_at_least_one_engine_search_limit_is_required() -> None:
         Settings(engine_search_depth=None, engine_move_time_ms=None)
 
 
+def test_engine_move_time_must_be_shorter_than_failure_timeout() -> None:
+    with pytest.raises(ValidationError, match="move time must be shorter"):
+        Settings(engine_move_time_ms=1_000, engine_move_timeout_ms=1_000)
+
+
 def test_non_local_host_is_rejected() -> None:
     with pytest.raises(ValidationError, match="local address"):
         Settings(app_host="0.0.0.0")

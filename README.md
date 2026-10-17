@@ -36,15 +36,16 @@ Verify the scaffold:
 uv run python -m voicechess --help
 ```
 
-The final local start command will be:
+Start the local application with:
 
 ```powershell
 uv run voicechess
 ```
 
-It will serve the browser application at `http://127.0.0.1:8000`. The command is
-already registered but will become operational after the FastAPI application is added
-in Phase 0 Step 10.
+Then open `http://127.0.0.1:8000` in a browser. The page and its assets are served
+locally and make no runtime requests outside the application. If Stockfish is missing,
+the page still opens and reports that the engine is unavailable; moves require a valid
+`VOICECHESS_STOCKFISH_PATH` or a `stockfish` executable on `PATH`.
 
 ## Development checks
 
@@ -98,6 +99,13 @@ $env:VOICECHESS_STOCKFISH_PATH = "C:\Tools\stockfish\stockfish.exe"
 $env:VOICECHESS_STOCKFISH_SKILL_LEVEL = "3"
 ```
 
+The search depth and move-time settings control how long Stockfish should think under
+normal conditions. The move timeout is a separate hard failure deadline for an
+unresponsive engine. When a move-time limit is configured, it must be shorter than the
+move timeout. A timeout or engine protocol failure closes that process so a stuck or
+invalid engine cannot affect later turns; the application can then start a fresh
+process.
+
 Reserved, currently unused settings are available for future phases:
 `VOICECHESS_WHISPER_MODEL_NAME`, `VOICECHESS_PIPER_VOICE_NAME`,
 `VOICECHESS_LOCAL_LLM_MODEL_NAME`, and the three `VOICECHESS_COACHING_*_THRESHOLD_CP`
@@ -109,6 +117,29 @@ The player controls White and Stockfish controls Black. Checkmate, stalemate,
 insufficient material, the seventy-five-move rule, and fivefold repetition end the
 game automatically. Claimable draws, such as threefold repetition and the fifty-move
 rule, are not claimed automatically because Phase 0 does not expose a draw-claim action.
+
+### Board snapshot contract
+
+Game snapshots represent the board as a JSON-compatible mapping of occupied algebraic
+squares to standard single-character piece symbols. White pieces use uppercase symbols
+(`P`, `N`, `B`, `R`, `Q`, `K`), Black pieces use lowercase symbols, and empty squares
+are omitted. For example, after `e4`, the mapping contains `"e4": "P"` and no `"e2"`
+entry. This keeps chess rules in the backend while giving the browser a small, stable
+rendering contract.
+
+### PGN export contract
+
+PGN exports are reconstructed from canonical SAN history and checked against the
+snapshot's final FEN. Generated documents include standard event, site, date, player,
+and result headers and are parsed back with `python-chess` before they are written.
+Each game uses `game-<game-id>.pgn` in the configured export directory. Re-exporting
+the same game atomically replaces its previous file so a failed write cannot leave a
+partial PGN at the final path.
+
+The API schemas expose the export filename and PGN content to the browser but never
+expose the server's local filesystem path. Other schemas define strict contracts for
+SAN requests, game snapshots, health status, and controlled error responses. API
+routes using these schemas are added in Phase 0 Step 10.
 
 ## Phase 0 boundaries
 
