@@ -32,9 +32,11 @@ const elements = {
   stateLabel: document.querySelector("#state-label"),
   statusMessage: document.querySelector("#status-message"),
   lastMove: document.querySelector("#last-move"),
-  moveForm: document.querySelector("#move-form"),
-  sanInput: document.querySelector("#san-input"),
-  moveButton: document.querySelector("#move-button"),
+  modeStatus: document.querySelector("#mode-status"),
+  manualModeButton: document.querySelector("#manual-mode-button"),
+  voiceModeButton: document.querySelector("#voice-mode-button"),
+  manualModeNote: document.querySelector("#manual-mode-note"),
+  voiceModeNote: document.querySelector("#voice-mode-note"),
   errorMessage: document.querySelector("#error-message"),
   moveHistory: document.querySelector("#move-history"),
   moveCount: document.querySelector("#move-count"),
@@ -44,10 +46,15 @@ const elements = {
   helpButton: document.querySelector("#help-button"),
   helpDialog: document.querySelector("#help-dialog"),
   closeHelpButton: document.querySelector("#close-help-button"),
+  promotionDialog: document.querySelector("#promotion-dialog"),
 };
 
 let snapshot = null;
 let busy = false;
+let inputMode = "manual";
+let selectedSquare = null;
+let pointerDrag = null;
+let suppressNextClick = false;
 
 class ApiError extends Error {
   constructor(message, code = "request_failed", status = 0) {
@@ -117,6 +124,7 @@ function renderSnapshot(game) {
 
 function renderBoard(board) {
   const fragment = document.createDocumentFragment();
+  const interactive = canSubmitManualMove();
   for (const rank of RANKS) {
     FILES.forEach((file, fileIndex) => {
       const squareName = `${file}${rank}`;
@@ -127,6 +135,13 @@ function renderBoard(board) {
       square.dataset.square = squareName;
 
       const piece = PIECES[board[squareName]];
+      const owned = Boolean(piece && piece.color === "white");
+      square.dataset.owned = String(owned);
+      square.tabIndex = interactive ? 0 : -1;
+      square.setAttribute("aria-selected", String(selectedSquare === squareName));
+      if (selectedSquare === squareName) {
+        square.classList.add("square-selected");
+      }
       square.setAttribute("aria-label", piece ? `${squareName}, ${piece.name}` : `${squareName}, empty`);
       if (piece) {
         const glyph = document.createElement("span");
@@ -134,9 +149,20 @@ function renderBoard(board) {
         // U+FE0E asks for the text glyph, not the emoji pawn some platforms substitute.
         glyph.textContent = piece.glyph + TEXT_PRESENTATION;
         glyph.setAttribute("aria-hidden", "true");
+        glyph.dataset.draggable = String(interactive && owned);
+        if (owned) {
+          glyph.addEventListener("pointerdown", (event) => beginPointerDrag(event, squareName));
+        }
         square.appendChild(glyph);
       }
 
+      square.addEventListener("click", () => selectBoardSquare(squareName));
+      square.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectBoardSquare(squareName);
+        }
+      });
       if (file === "a") {
         square.appendChild(coordinate(String(rank), "rank"));
       }
@@ -149,6 +175,7 @@ function renderBoard(board) {
 
   elements.board.replaceChildren(fragment);
   elements.board.setAttribute("aria-busy", "false");
+  elements.board.dataset.interactive = String(interactive);
 }
 
 function coordinate(value, kind) {
@@ -157,6 +184,220 @@ function coordinate(value, kind) {
   label.textContent = value;
   label.setAttribute("aria-hidden", "true");
   return label;
+}
+
+function canSubmitManualMove() {
+  return Boolean(
+    inputMode === "manual" &&
+      !busy &&
+      snapshot &&
+      snapshot.status === "active" &&
+      snapshot.state === "PLAYER_INPUT" &&
+      snapshot.side_to_move === "white",
+  );
+}
+
+function selectBoardSquare(squareName) {
+  if (suppressNextClick) {
+    suppressNextClick = false;
+    return;
+  }
+  if (!canSubmitManualMove()) {
+    return;
+  }
+
+  const piece = snapshot.board[squareName];
+  const isOwnedPiece = Boolean(piece && PIECES[piece].color === "white");
+  if (selectedSquare === null) {
+    if (!isOwnedPiece) {
+      return;
+    }
+    selectedSquare = squareName;
+    renderBoard(snapshot.board);
+    focusSquare(squareName);
+    return;
+  }
+
+  if (selectedSquare === squareName) {
+    selectedSquare = null;
+    renderBoard(snapshot.board);
+    focusSquare(squareName);
+    return;
+  }
+
+  if (isOwnedPiece) {
+    selectedSquare = squareName;
+    renderBoard(snapshot.board);
+    focusSquare(squareName);
+    return;
+  }
+
+  void submitBoardMove(selectedSquare, squareName);
+}
+
+function focusSquare(squareName) {
+  elements.board.querySelector(`[data-square="${squareName}"]`)?.focus();
+}
+
+function beginPointerDrag(event, squareName) {
+  if (!canSubmitManualMove() || event.button !== 0) {
+    return;
+  }
+  pointerDrag = {
+    pointerId: event.pointerId,
+    sourceSquare: squareName,
+    startX: event.clientX,
+    startY: event.clientY,
+    moved: false,
+    piece: event.currentTarget,
+    target: null,
+  };
+  event.currentTarget.setPointerCapture(event.pointerId);
+  event.currentTarget.addEventListener("pointermove", movePointerDrag);
+  event.currentTarget.addEventListener("pointerup", finishPointerDrag);
+  event.currentTarget.addEventListener("pointercancel", cancelPointerDrag);
+}
+
+function movePointerDrag(event) {
+  if (pointerDrag === null || pointerDrag.pointerId !== event.pointerId) {
+    return;
+  }
+  const deltaX = event.clientX - pointerDrag.startX;
+  const deltaY = event.clientY - pointerDrag.startY;
+  if (!pointerDrag.moved && Math.hypot(deltaX, deltaY) < 6) {
+    return;
+  }
+
+  event.preventDefault();
+  pointerDrag.moved = true;
+  selectedSquare = pointerDrag.sourceSquare;
+  pointerDrag.piece.classList.add("piece-dragging");
+  pointerDrag.piece.style.setProperty("--drag-x", `${deltaX}px`);
+  pointerDrag.piece.style.setProperty("--drag-y", `${deltaY}px`);
+  elements.board
+    .querySelector(`[data-square="${pointerDrag.sourceSquare}"]`)
+    ?.classList.add("square-selected");
+
+  const target = document
+    .elementsFromPoint(event.clientX, event.clientY)
+    .find((element) => element.classList.contains("square"));
+  pointerDrag.target?.classList.remove("square-drop-target");
+  pointerDrag.target = target || null;
+  if (pointerDrag.target?.dataset.square !== pointerDrag.sourceSquare) {
+    pointerDrag.target?.classList.add("square-drop-target");
+  }
+}
+
+function finishPointerDrag(event) {
+  if (pointerDrag === null || pointerDrag.pointerId !== event.pointerId) {
+    return;
+  }
+  const sourceSquare = pointerDrag.sourceSquare;
+  const targetSquare = pointerDrag.target?.dataset.square || null;
+  const moved = pointerDrag.moved;
+  cleanUpPointerDrag();
+  if (!moved) {
+    return;
+  }
+
+  suppressNextClick = true;
+  selectedSquare = null;
+  requestAnimationFrame(() => {
+    suppressNextClick = false;
+  });
+  if (targetSquare && targetSquare !== sourceSquare && canSubmitManualMove()) {
+    void submitBoardMove(sourceSquare, targetSquare);
+  } else if (snapshot) {
+    renderBoard(snapshot.board);
+  }
+}
+
+function cancelPointerDrag(event) {
+  if (pointerDrag === null || pointerDrag.pointerId !== event.pointerId) {
+    return;
+  }
+  cleanUpPointerDrag();
+  selectedSquare = null;
+  if (snapshot) {
+    renderBoard(snapshot.board);
+  }
+}
+
+function cleanUpPointerDrag() {
+  const drag = pointerDrag;
+  if (drag === null) {
+    return;
+  }
+  drag.target?.classList.remove("square-drop-target");
+  drag.piece.classList.remove("piece-dragging");
+  drag.piece.style.removeProperty("--drag-x");
+  drag.piece.style.removeProperty("--drag-y");
+  drag.piece.removeEventListener("pointermove", movePointerDrag);
+  drag.piece.removeEventListener("pointerup", finishPointerDrag);
+  drag.piece.removeEventListener("pointercancel", cancelPointerDrag);
+  if (drag.piece.hasPointerCapture(drag.pointerId)) {
+    drag.piece.releasePointerCapture(drag.pointerId);
+  }
+  pointerDrag = null;
+}
+
+async function submitBoardMove(sourceSquare, targetSquare) {
+  let promotion = null;
+  if (snapshot.board[sourceSquare] === "P" && targetSquare.endsWith("8")) {
+    promotion = await choosePromotion();
+    if (promotion === null) {
+      selectedSquare = null;
+      renderBoard(snapshot.board);
+      return;
+    }
+  }
+
+  selectedSquare = null;
+  await runAction(
+    () =>
+      requestJson("/api/game/move", {
+        method: "POST",
+        body: JSON.stringify({
+          from_square: sourceSquare,
+          to_square: targetSquare,
+          promotion,
+        }),
+      }),
+    "Stockfish is thinking…",
+  );
+}
+
+function choosePromotion() {
+  elements.promotionDialog.returnValue = "";
+  elements.promotionDialog.showModal();
+  return new Promise((resolve) => {
+    elements.promotionDialog.addEventListener(
+      "close",
+      () => {
+        const value = elements.promotionDialog.returnValue;
+        resolve(["q", "r", "b", "n"].includes(value) ? value : null);
+      },
+      { once: true },
+    );
+  });
+}
+
+function setInputMode(mode) {
+  inputMode = mode;
+  selectedSquare = null;
+  if (pointerDrag !== null) {
+    cleanUpPointerDrag();
+  }
+  elements.modeStatus.textContent = mode === "manual" ? "Manual" : "Voice planned";
+  elements.manualModeButton.setAttribute("aria-pressed", String(mode === "manual"));
+  elements.voiceModeButton.setAttribute("aria-pressed", String(mode === "voice"));
+  elements.manualModeNote.hidden = mode !== "manual";
+  elements.voiceModeNote.hidden = mode !== "voice";
+  clearError();
+  updateControls();
+  if (snapshot) {
+    renderBoard(snapshot.board);
+  }
 }
 
 function renderHistory(moves) {
@@ -193,14 +434,20 @@ function renderHistory(moves) {
 
 function updateControls() {
   const active = snapshot && snapshot.status === "active";
-  const acceptingMove = active && snapshot.state === "PLAYER_INPUT";
-  elements.sanInput.disabled = busy || !acceptingMove;
-  elements.moveButton.disabled = busy || !acceptingMove;
-  elements.moveButton.dataset.loading = String(busy);
+  elements.manualModeButton.disabled = busy;
+  elements.voiceModeButton.disabled = busy;
   elements.newGameButton.disabled = busy;
   elements.resignButton.disabled = busy || !active;
   elements.exportButton.disabled = busy || !snapshot;
   elements.board.setAttribute("aria-busy", String(busy));
+  const boardInteractive = canSubmitManualMove();
+  elements.board.dataset.interactive = String(boardInteractive);
+  for (const square of elements.board.querySelectorAll(".square")) {
+    square.tabIndex = boardInteractive ? 0 : -1;
+  }
+  for (const piece of elements.board.querySelectorAll('.square[data-owned="true"] .piece')) {
+    piece.dataset.draggable = String(boardInteractive);
+  }
 }
 
 function setBusy(value, message = null) {
@@ -246,28 +493,8 @@ async function runAction(action, thinkingMessage) {
   }
 }
 
-elements.moveForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const san = elements.sanInput.value.trim();
-  if (!san) {
-    showError(new ApiError("Enter a move, for example e4 or Nf3.", "empty_san"));
-    elements.sanInput.focus();
-    return;
-  }
-
-  const succeeded = await runAction(
-    () =>
-      requestJson("/api/game/move", {
-        method: "POST",
-        body: JSON.stringify({ san }),
-      }),
-    "Stockfish is thinking…",
-  );
-  if (succeeded && snapshot && snapshot.state === "PLAYER_INPUT") {
-    elements.sanInput.value = "";
-    elements.sanInput.focus();
-  }
-});
+elements.manualModeButton.addEventListener("click", () => setInputMode("manual"));
+elements.voiceModeButton.addEventListener("click", () => setInputMode("voice"));
 
 elements.newGameButton.addEventListener("click", async () => {
   if (snapshot && snapshot.moves.length > 0 && !window.confirm("Start a new game?")) {
@@ -277,8 +504,6 @@ elements.newGameButton.addEventListener("click", async () => {
     () => requestJson("/api/game/new", { method: "POST", body: "{}" }),
     "Setting up a new board…",
   );
-  elements.sanInput.value = "";
-  elements.sanInput.focus();
 });
 
 elements.resignButton.addEventListener("click", async () => {
@@ -325,8 +550,6 @@ async function initialize() {
   await Promise.allSettled([refreshHealth(), refreshGame()]);
   if (!snapshot) {
     showError(new ApiError("The current game could not be loaded."));
-  } else if (snapshot.state === "PLAYER_INPUT") {
-    elements.sanInput.focus();
   }
 }
 

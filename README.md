@@ -1,12 +1,14 @@
 # Adaptive Chess Teacher
 
-Phase 0 builds a fully local browser chess game against Stockfish. The player enters
-Standard Algebraic Notation (SAN), such as `e4`, `Nf3`, or `O-O`; later phases add
-voice and coaching capabilities.
+Phase 0 builds a fully local browser chess game against Stockfish. The player moves
+White's pieces by dragging them or selecting a starting and destination square. A
+Manual/Voice mode control establishes the future interaction model; local voice input
+and coaching arrive in later phases.
 
 ## Prerequisites
 
 - Windows, macOS, or Linux with Python 3.12.
+- [`uv`](https://docs.astral.sh/uv/) for the locked Python environment.
 - A local [Stockfish](https://stockfishchess.org/download/) executable.
 
 ## Setup
@@ -20,6 +22,22 @@ for your platform. On Windows, Winget can install it directly:
 winget install --id Astral.uv -e
 ```
 
+On Windows, install Stockfish from the Winget catalog:
+
+```powershell
+winget install --id Stockfish.Stockfish --exact
+```
+
+Open a new PowerShell window after installation so the `stockfish` alias is available.
+Confirm both tools before continuing:
+
+```powershell
+uv --version
+stockfish
+```
+
+Enter `quit` to close the Stockfish prompt.
+
 From the repository root, create or exactly synchronize the project environment:
 
 ```powershell
@@ -30,7 +48,7 @@ uv sync
 development tools from `pyproject.toml` and `uv.lock`. Do not use ad-hoc `pip install`
 commands for project dependencies.
 
-Verify the scaffold:
+Verify the application command:
 
 ```powershell
 uv run python -m voicechess --help
@@ -47,6 +65,8 @@ locally and make no runtime requests outside the application. If Stockfish is mi
 the page still opens and reports that the engine is unavailable; moves require a valid
 `VOICECHESS_STOCKFISH_PATH` or a `stockfish` executable on `PATH`.
 
+Stop the server with `Ctrl+C`.
+
 ## Development checks
 
 Run these checks before committing a change:
@@ -56,6 +76,8 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy src
 uv run pytest
+node --check src/voicechess/static/app.js
+uv lock --check
 git diff --check
 ```
 
@@ -67,6 +89,16 @@ To apply safe Ruff formatting changes, use `uv run ruff format .`. The committed
 All configuration has a local default and can be overridden with an environment
 variable prefixed by `VOICECHESS_`. Store local overrides in an untracked `.env` file
 or set them in the shell before starting the application.
+
+To create a project-local configuration file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The resulting `.env` is intentionally ignored by Git. On Windows, locate a Winget
+installation with `Get-Command stockfish` and place its full path in
+`VOICECHESS_STOCKFISH_PATH` if the alias is not visible to the application.
 
 | Setting | Environment variable | Default |
 | --- | --- | --- |
@@ -138,14 +170,64 @@ partial PGN at the final path.
 
 The API schemas expose the export filename and PGN content to the browser but never
 expose the server's local filesystem path. Other schemas define strict contracts for
-SAN requests, game snapshots, health status, and controlled error responses. API
-routes using these schemas are added in Phase 0 Step 10.
+board-coordinate and SAN requests, game snapshots, health status, and controlled error responses. The
+implemented API routes use these schemas for game, health, export, and controlled error
+responses.
+
+### Move input
+
+Manual mode accepts drag-and-drop and select-then-select board interaction. The browser
+sends only the source square, destination square, and optional promotion piece. The
+backend converts that request into a chess move and `python-chess` checks legality. The
+browser does not move the piece permanently until the server returns a valid snapshot;
+an illegal move therefore restores the unchanged position automatically.
+
+The Voice option is visible but marked as planned. It intentionally disables board
+interaction and explains that local transcription and confirmation arrive in Phase 3.
+
+## Runtime output
+
+- Structured logs default to `logs/voicechess.jsonl`.
+- PGN exports default to `exports/game-<game-id>.pgn`.
+- Both directories contain local runtime data and are ignored by Git.
+
+## Local documentation structure
+
+The Git-ignored `docs/` workspace is separated by purpose:
+
+- `docs/phases/` contains forward-looking phase plans.
+- `docs/implementation/` documents behavior that has actually been built.
+- `docs/development-log/` records every chronological implementation step, substep, and
+  decision.
+
+The root `README.md` and `SPEC.md` remain the tracked, shareable documentation.
+
+## Project layout
+
+```text
+src/voicechess/
+├── api.py              FastAPI composition and routes
+├── config.py           validated environment configuration
+├── engine/             Stockfish process boundary
+├── game/               rules-facing game controller and snapshots
+├── logging.py          structured JSONL logging
+├── pgn/                validated atomic PGN export
+├── schemas.py          HTTP request and response contracts
+├── state.py            validated lifecycle state machine
+├── static/             local CSS, JavaScript, and favicon
+└── templates/          browser HTML
+```
 
 ## Phase 0 boundaries
 
 - Fully local FastAPI browser application.
 - `python-chess` owns rules, legal moves, board state, SAN, and PGN.
 - Stockfish supplies the opponent move.
-- No voice input, speech output, coaching, LLM, click-to-move, multiplayer, or cloud
-  services are included in Phase 0.
+- No functional voice input, speech output, coaching, LLM, multiplayer, or cloud services
+  are included in Phase 0.
+- The player is White in Phase 0.
+- Manual play uses drag-and-drop or select-then-select board moves.
+- The visible Voice option is a roadmap placeholder, not a microphone implementation.
+- Claimable draws are not exposed as a user action.
+- Deployment and containerization are outside the Phase 0 boundary.
 

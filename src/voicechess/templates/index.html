@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="A fully local chess game against Stockfish using Standard Algebraic Notation."
+      content="A fully local visual chess game against Stockfish."
     />
     <meta name="theme-color" content="#0a0b0d" />
     <title>Adaptive Chess Teacher</title>
@@ -69,27 +69,36 @@
         </section>
 
         <section class="panel-section" aria-labelledby="move-heading">
-          <h2 id="move-heading" class="label">Your move</h2>
-          <form id="move-form" class="move-form" novalidate>
-            <label for="san-input" class="visually-hidden">Move in algebraic notation</label>
-            <div class="input-row">
-              <input
-                id="san-input"
-                name="san"
-                type="text"
-                maxlength="32"
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-                placeholder="e4, Nf3, O-O"
-                required
-              />
-              <button id="move-button" class="button button-primary" type="submit">
-                <span class="button-label">Play</span>
-                <span class="button-loader" aria-hidden="true"></span>
-              </button>
-            </div>
-          </form>
+          <div class="label-row input-mode-heading">
+            <h2 id="move-heading" class="label">Move input</h2>
+            <span class="mode-status" id="mode-status">Manual</span>
+          </div>
+          <div class="mode-switch" role="group" aria-label="Move input mode">
+            <button
+              id="manual-mode-button"
+              class="mode-option"
+              type="button"
+              aria-pressed="true"
+            >
+              Manual
+            </button>
+            <button
+              id="voice-mode-button"
+              class="mode-option"
+              type="button"
+              aria-pressed="false"
+              aria-describedby="voice-mode-note"
+            >
+              Voice <span class="mode-badge">Planned</span>
+            </button>
+          </div>
+          <p id="manual-mode-note" class="move-guidance">
+            Drag a white piece to its destination, or select the starting and ending squares.
+          </p>
+          <p id="voice-mode-note" class="move-guidance voice-mode-note" hidden>
+            Local voice commands will be enabled with transcription and legal-move confirmation
+            in Phase 3. Switch to Manual to play now.
+          </p>
           <div id="error-message" class="error-message" role="alert" hidden></div>
         </section>
 
@@ -123,16 +132,39 @@
         </button>
       </div>
       <div class="help-content">
-        <p>Type the destination square for a pawn, or the piece letter followed by its square.</p>
+        <p>
+          In Manual mode, drag a white piece to its destination or select its starting and ending
+          squares. The server checks every move before changing the board.
+        </p>
         <dl class="notation-examples">
-          <div><dt><code>e4</code></dt><dd>Move a pawn to e4</dd></div>
-          <div><dt><code>Nf3</code></dt><dd>Move a knight to f3</dd></div>
-          <div><dt><code>Bxc6</code></dt><dd>A bishop captures on c6</dd></div>
-          <div><dt><code>O-O</code></dt><dd>Castle kingside</dd></div>
-          <div><dt><code>Qh7#</code></dt><dd>Queen moves to h7 with checkmate</dd></div>
+          <div><dt>Select</dt><dd>Choose one of your white pieces</dd></div>
+          <div><dt>Move</dt><dd>Drop it on, or select, the destination square</dd></div>
+          <div><dt>Illegal move</dt><dd>The piece returns to its starting square</dd></div>
+          <div><dt>Promotion</dt><dd>Choose a queen, rook, bishop, or knight</dd></div>
         </dl>
-        <p class="help-note">The board is display-only for now. Moves are entered in the field.</p>
+        <p class="help-note">
+          Voice mode is visible as part of the interface plan but remains unavailable until the
+          local speech recognizer and confirmation flow are implemented.
+        </p>
       </div>
+    </dialog>
+
+    <dialog id="promotion-dialog" class="help-dialog promotion-dialog" aria-labelledby="promotion-title">
+      <form method="dialog">
+        <div class="dialog-heading">
+          <h2 id="promotion-title">Choose promotion</h2>
+        </div>
+        <p>Select the piece your pawn becomes.</p>
+        <div class="promotion-options">
+          <button class="button button-primary" type="submit" value="q">Queen</button>
+          <button class="button button-ghost" type="submit" value="r">Rook</button>
+          <button class="button button-ghost" type="submit" value="b">Bishop</button>
+          <button class="button button-ghost" type="submit" value="n">Knight</button>
+        </div>
+        <button class="button button-ghost promotion-cancel" type="submit" value="cancel">
+          Cancel
+        </button>
+      </form>
     </dialog>
 
     <noscript>

@@ -120,7 +120,9 @@ def test_browser_shell_and_local_assets_are_served(api_context: ApiTestContext) 
     assert page.status_code == 200
     assert "Adaptive Chess Teacher" in page.text
     assert 'id="chessboard"' in page.text
-    assert 'id="move-form"' in page.text
+    assert 'id="manual-mode-button"' in page.text
+    assert 'id="voice-mode-button"' in page.text
+    assert 'id="promotion-dialog"' in page.text
     assert css.status_code == 200
     assert ".chessboard" in css.text
     assert javascript.status_code == 200
@@ -151,6 +153,37 @@ def test_valid_san_runs_complete_player_and_engine_turn(api_context: ApiTestCont
     assert len(api_context.engine.positions) == 1
     engine_board = chess.Board(api_context.engine.positions[0][0])
     assert engine_board.piece_at(chess.E4) == chess.Piece(chess.PAWN, chess.WHITE)
+
+
+def test_valid_board_move_runs_complete_player_and_engine_turn(
+    api_context: ApiTestContext,
+) -> None:
+    response = api_context.client.post(
+        "/api/game/move",
+        json={"from_square": "e2", "to_square": "e4", "promotion": None},
+    )
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["moves"] == ["e4", "e5"]
+    assert payload["board"]["e4"] == "P"
+    assert payload["state"] == "PLAYER_INPUT"
+
+
+def test_illegal_board_move_returns_piece_to_original_position(
+    api_context: ApiTestContext,
+) -> None:
+    response = api_context.client.post(
+        "/api/game/move",
+        json={"from_square": "e2", "to_square": "e5"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "illegal_move"
+    snapshot = api_context.client.get("/api/game").json()
+    assert snapshot["board"]["e2"] == "P"
+    assert "e5" not in snapshot["board"]
+    assert snapshot["moves"] == []
 
 
 @pytest.mark.parametrize(

@@ -55,6 +55,24 @@ class IllegalSanMoveError(MoveInputError):
         super().__init__(f"'{san}' is not a legal move in the current position.")
 
 
+class InvalidBoardMoveError(MoveInputError):
+    """Raised when board coordinates cannot describe a chess move."""
+
+    def __init__(self, source: str, target: str) -> None:
+        self.source = source
+        self.target = target
+        super().__init__(f"The board move from {source} to {target} is invalid.")
+
+
+class IllegalBoardMoveError(MoveInputError):
+    """Raised when a coordinate move is not legal in the current position."""
+
+    def __init__(self, source: str, target: str) -> None:
+        self.source = source
+        self.target = target
+        super().__init__(f"The piece on {source} cannot legally move to {target}.")
+
+
 class IllegalEngineMoveError(GameError):
     """Raised when the engine boundary supplies an illegal move."""
 

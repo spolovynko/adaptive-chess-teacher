@@ -21,7 +21,7 @@ Prefer boring, readable code with explicit state over abstraction.
 - **Free and open source only.** No paid APIs, no hosted inference, no accounts.
 - **Fully offline after first model download.** No network calls at runtime.
 - **CPU-only must work.** GPU may be used if present but is never required.
-- Python 3.11+. Dependencies pinned in `pyproject.toml`.
+- Python 3.12. Dependencies pinned in `pyproject.toml` and locked in `uv.lock`.
 - Target latency: user finishes speaking → engine's reply spoken aloud in under 2 seconds.
 
 ---
@@ -51,7 +51,7 @@ a position to *judge* a move or *generate* a move, the design is wrong.
 | STT | `faster-whisper` | `small.en`, int8 compute type |
 | Fuzzy match | `rapidfuzz`, `jellyfish` | Edit distance + Metaphone |
 | Rules | `python-chess` | |
-| Engine | Stockfish 17 | Two roles: opponent and analyst |
+| Engine | Stockfish 19 or compatible UCI release | Opponent now; analyst in Phase 4 |
 | LLM | Ollama, `qwen2.5:7b-instruct-q4_K_M` | Fall back to 3b on ≤8 GB RAM |
 | TTS | `piper-tts` | |
 
@@ -62,6 +62,10 @@ with known transitions; a framework would hide the latency the project exists to
 ---
 
 ## 5. State machine
+
+The diagram below is the target voice interaction loop for later phases. Phase 0 uses
+the browser game lifecycle documented in the implementation notes while preserving the
+same explicit-state design.
 
 ```
 IDLE → LISTENING → TRANSCRIBING → RESOLVING → CONFIRMING → APPLYING
@@ -179,9 +183,13 @@ move, or naming squares not present in the fact sheet.
 Implement one phase at a time. Each ends with a working program. **Stop after each phase
 and report before starting the next.**
 
-**Phase 0 — Terminal chess.** `python-chess` + Stockfish. User types SAN, engine replies.
-No audio. Engine skill level capped and configurable.
-*Done when:* a full game is playable in the terminal and exports valid PGN.
+**Phase 0 — Local browser chess.** FastAPI + `python-chess` + Stockfish. The user sees
+an accessible visual board, moves White's pieces by drag-and-drop or square selection,
+receives an engine reply, and can start a new game, resign, or export validated PGN. A
+Manual/Voice control exposes the planned interaction modes, but Voice is clearly marked
+unavailable. No audio or coaching.
+*Done when:* a full game is playable through the localhost browser interface, failures
+do not corrupt state, structured timings are present, and exports round-trip as PGN.
 
 **Phase 1 — Output voice.** Pipe the engine's move through Piper. User still types.
 *Done when:* every engine move is spoken, first audio within 300 ms.
@@ -212,8 +220,8 @@ than the move, opening book so the first six moves are not Stockfish crushing a 
 
 ## 9. Non-goals
 
-- No web UI, no mobile, no multiplayer, no accounts.
-- No board visualisation beyond an ASCII render in the terminal.
+- No native mobile application, multiplayer, or accounts.
+- No public hosting, cloud runtime, or external API dependency.
 - No fine-tuning or training of any model.
 - No cloud deployment or Docker orchestration.
 - No support for chess variants.
@@ -222,13 +230,7 @@ than the move, opening book so the first six moves are not Stockfish crushing a 
 
 ## 10. Start here
 
-Implement **Phase 0 only**. Set up:
-
-- `pyproject.toml` with pinned dependencies
-- Package layout under `src/voicechess/`
-- The state machine skeleton with timestamped stage logging (even though Phase 0 uses
-  only a few states)
-- A config module holding engine skill level, model names, and the classifier thresholds
-- The terminal game loop
-
-Then stop and report what you built before continuing to Phase 1.
+Phase 0 is implemented as the local browser application described above. Complete and
+record its acceptance gate before starting Phase 1. Later phases must preserve the
+browser interface, explicit state ownership, local-only runtime, and structured latency
+instrumentation established in Phase 0.

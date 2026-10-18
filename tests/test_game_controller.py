@@ -19,8 +19,10 @@ from voicechess.game import (
     GameNotActiveError,
     GameResult,
     GameStatus,
+    IllegalBoardMoveError,
     IllegalEngineMoveError,
     IllegalSanMoveError,
+    InvalidBoardMoveError,
     InvalidSanError,
     PlayerColor,
     PlayerMoveNotExpectedError,
@@ -115,6 +117,73 @@ def test_valid_player_and_engine_moves_complete_a_turn(
     assert game.side_to_move is PlayerColor.WHITE
     assert game.state is GameState.PLAYER_INPUT
     assert game.message == "White to move."
+
+
+def test_board_coordinates_complete_a_player_and_engine_turn(
+    logger_and_destination: tuple[logging.Logger, Path],
+) -> None:
+    logger, destination = logger_and_destination
+    game = GameController(logger=logger, game_id_factory=lambda: TEST_GAME_ID)
+
+    assert game.submit_player_coordinates("e2", "e4") == "e4"
+    assert game.apply_engine_move(chess.Move.from_uci("e7e5")) == "e5"
+
+    assert game.moves == ("e4", "e5")
+    assert game.side_to_move is PlayerColor.WHITE
+    resolved = next(
+        event for event in read_events(destination) if event["event"] == "board_move_resolved"
+    )
+    assert resolved["metadata"] == {
+        "source": "e2",
+        "target": "e4",
+        "promotion": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "error_type"),
+    [
+        ("z9", "e4", InvalidBoardMoveError),
+        ("e2", "e5", IllegalBoardMoveError),
+    ],
+)
+def test_rejected_board_move_preserves_game_state(
+    logger_and_destination: tuple[logging.Logger, Path],
+    source: str,
+    target: str,
+    error_type: type[Exception],
+) -> None:
+    logger, destination = logger_and_destination
+    game = GameController(logger=logger, game_id_factory=lambda: TEST_GAME_ID)
+    original_fen = game.fen
+
+    with pytest.raises(error_type):
+        game.submit_player_coordinates(source, target)
+
+    assert game.fen == original_fen
+    assert game.moves == ()
+    assert game.state is GameState.PLAYER_INPUT
+    assert read_events(destination)[-1]["event"] == "board_move_rejected"
+
+
+def test_board_coordinates_support_promotion(
+    logger_and_destination: tuple[logging.Logger, Path],
+) -> None:
+    logger, _ = logger_and_destination
+    game = GameController(logger=logger, game_id_factory=lambda: TEST_GAME_ID)
+
+    turns = (
+        ("a2", "a4", "h7h5"),
+        ("a4", "a5", "h5h4"),
+        ("a5", "a6", "h4h3"),
+        ("a6", "b7", "h3g2"),
+    )
+    for source, target, engine_move in turns:
+        game.submit_player_coordinates(source, target)
+        game.apply_engine_move(chess.Move.from_uci(engine_move))
+
+    assert game.submit_player_coordinates("b7", "a8", "q") == "bxa8=Q"
+    assert game.snapshot().board["a8"] == "Q"
 
 
 @pytest.mark.parametrize(

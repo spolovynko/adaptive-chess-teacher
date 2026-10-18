@@ -13,6 +13,7 @@ from voicechess.game import GameController
 from voicechess.logging import configure_logging, reset_logging
 from voicechess.pgn import PgnExportResult
 from voicechess.schemas import (
+    BoardMoveRequest,
     ErrorResponse,
     GameSnapshotResponse,
     HealthResponse,
@@ -41,6 +42,33 @@ def test_move_request_strips_san_whitespace() -> None:
 def test_move_request_rejects_empty_missing_and_extra_data(payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         MoveRequest.model_validate(payload)
+
+
+def test_board_move_request_accepts_coordinates_and_optional_promotion() -> None:
+    move = BoardMoveRequest.model_validate(
+        {"from_square": "b7", "to_square": "a8", "promotion": "q"}
+    )
+
+    assert move.model_dump(mode="json") == {
+        "from_square": "b7",
+        "to_square": "a8",
+        "promotion": "q",
+    }
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"from_square": "z9", "to_square": "e4"},
+        {"from_square": "e2", "to_square": "e4", "promotion": "k"},
+        {"from_square": "e2", "to_square": "e4", "unexpected": True},
+    ],
+)
+def test_board_move_request_rejects_invalid_coordinates_and_fields(
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        BoardMoveRequest.model_validate(payload)
 
 
 def test_snapshot_response_is_json_ready_and_copies_domain_data(tmp_path: Path) -> None:

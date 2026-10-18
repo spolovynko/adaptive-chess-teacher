@@ -14,8 +14,10 @@ from voicechess.game.errors import (
     EmptySanError,
     EngineMoveNotExpectedError,
     GameNotActiveError,
+    IllegalBoardMoveError,
     IllegalEngineMoveError,
     IllegalSanMoveError,
+    InvalidBoardMoveError,
     InvalidSanError,
     PlayerMoveNotExpectedError,
 )
@@ -114,16 +116,11 @@ class GameController:
 
     def submit_player_san(self, san: str) -> str:
         """Validate and apply one player move in Standard Algebraic Notation."""
-        self._ensure_active("player_move")
-        error: Exception
-        if self.state is not GameState.PLAYER_INPUT or self.side_to_move is not self.player_color:
-            error = PlayerMoveNotExpectedError()
-            self._log_rejected_action("player_move_rejected", error)
-            raise error
+        self._ensure_player_move_expected()
 
         normalized_san = san.strip()
         if not normalized_san:
-            error = EmptySanError()
+            error: Exception = EmptySanError()
             self._log_rejected_action("player_move_rejected", error)
             raise error
 
@@ -148,6 +145,52 @@ class GameController:
             duration_ms=(perf_counter() - started_at) * 1_000,
             metadata={"san": normalized_san},
         )
+        return self._complete_player_move(move)
+
+    def submit_player_coordinates(
+        self,
+        source: str,
+        target: str,
+        promotion: str | None = None,
+    ) -> str:
+        """Validate and apply a player move selected on the visual board."""
+        self._ensure_player_move_expected()
+        normalized_source = source.strip().lower()
+        normalized_target = target.strip().lower()
+        normalized_promotion = promotion.strip().lower() if promotion is not None else ""
+        move_text = f"{normalized_source}{normalized_target}{normalized_promotion}"
+
+        self._state_machine.transition_to(GameState.RESOLVING)
+        started_at = perf_counter()
+        error: Exception
+        try:
+            move = chess.Move.from_uci(move_text)
+        except ValueError as exc:
+            error = InvalidBoardMoveError(normalized_source, normalized_target)
+            self._recover_rejected_board_move(error, started_at)
+            raise error from exc
+
+        if move not in self._board.legal_moves:
+            error = IllegalBoardMoveError(normalized_source, normalized_target)
+            self._recover_rejected_board_move(error, started_at)
+            raise error
+
+        log_event(
+            self._logger,
+            logging.INFO,
+            "board_move_resolved",
+            game_id=self.game_id,
+            duration_ms=(perf_counter() - started_at) * 1_000,
+            metadata={
+                "source": normalized_source,
+                "target": normalized_target,
+                "promotion": normalized_promotion or None,
+            },
+        )
+        return self._complete_player_move(move)
+
+    def _complete_player_move(self, move: chess.Move) -> str:
+        """Apply a resolved legal player move and advance the lifecycle."""
         self._state_machine.transition_to(GameState.APPLYING_PLAYER_MOVE)
         canonical_san = self._apply_move(move, event="player_move_applied")
 
@@ -287,6 +330,22 @@ class GameController:
             error,
             duration_ms=(perf_counter() - started_at) * 1_000,
         )
+
+    def _recover_rejected_board_move(self, error: Exception, started_at: float) -> None:
+        self._state_machine.transition_to(GameState.PLAYER_INPUT)
+        self._log_rejected_action(
+            "board_move_rejected",
+            error,
+            duration_ms=(perf_counter() - started_at) * 1_000,
+        )
+
+    def _ensure_player_move_expected(self) -> None:
+        self._ensure_active("player_move")
+        if self.state is GameState.PLAYER_INPUT and self.side_to_move is self.player_color:
+            return
+        error = PlayerMoveNotExpectedError()
+        self._log_rejected_action("player_move_rejected", error)
+        raise error
 
     def _ensure_active(self, action: str) -> None:
         if self.status is GameStatus.ACTIVE:

@@ -33,6 +33,7 @@ from voicechess.game import (
     GameController,
     GameError,
     GameNotActiveError,
+    IllegalBoardMoveError,
     IllegalEngineMoveError,
     IllegalSanMoveError,
     InvalidSanError,
@@ -44,6 +45,7 @@ from voicechess.game.snapshot import GameSnapshot
 from voicechess.logging import configure_logging, log_event, reset_logging
 from voicechess.pgn import PgnExporter, PgnExportError, PgnExportResult
 from voicechess.schemas import (
+    BoardMoveRequest,
     ErrorResponse,
     GameSnapshotResponse,
     HealthResponse,
@@ -238,9 +240,16 @@ def create_app(
             return GameSnapshotResponse.from_snapshot(services.game.new_game())
 
     @app.post("/api/game/move", response_model=GameSnapshotResponse)
-    def submit_move(request: MoveRequest) -> GameSnapshotResponse:
+    def submit_move(request: MoveRequest | BoardMoveRequest) -> GameSnapshotResponse:
         with services.game_lock:
-            services.game.submit_player_san(request.san)
+            if isinstance(request, MoveRequest):
+                services.game.submit_player_san(request.san)
+            else:
+                services.game.submit_player_coordinates(
+                    request.from_square,
+                    request.to_square,
+                    request.promotion,
+                )
             if services.game.status is not GameStatus.ACTIVE:
                 return GameSnapshotResponse.from_snapshot(services.game.snapshot())
 
@@ -291,6 +300,8 @@ def _game_error_response(error: GameError) -> tuple[int, str]:
     if isinstance(error, InvalidSanError):
         return 400, "invalid_san"
     if isinstance(error, IllegalSanMoveError):
+        return 400, "illegal_move"
+    if isinstance(error, IllegalBoardMoveError):
         return 400, "illegal_move"
     if isinstance(error, MoveInputError):
         return 400, "invalid_move"

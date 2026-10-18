@@ -29,6 +29,14 @@ class MoveRequest(ApiModel):
     san: str = Field(min_length=1, max_length=32)
 
 
+class BoardMoveRequest(ApiModel):
+    """One player move selected by source and destination board squares."""
+
+    from_square: SquareName
+    to_square: SquareName
+    promotion: Literal["q", "r", "b", "n"] | None = None
+
+
 class GameSnapshotResponse(ApiModel):
     """Complete browser-facing representation of the current game."""
 
@@ -107,6 +115,7 @@ class PgnExportResponse(ApiModel):
 
 
 __all__ = [
+    "BoardMoveRequest",
     "ErrorDetail",
     "ErrorResponse",
     "GameSnapshotResponse",
