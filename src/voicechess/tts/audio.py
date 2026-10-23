@@ -21,12 +21,24 @@ def read_validated_wav(path: Path, *, sample_rate: int, channels: int) -> bytes:
             audio = audio_file.read(MAX_AUDIO_BYTES + 1)
         if len(audio) > MAX_AUDIO_BYTES:
             raise TtsOutputValidationError
+        validate_wav_bytes(audio, sample_rate=sample_rate, channels=channels)
+        return audio
+    except (OSError, EOFError, ValueError, wave.Error) as exc:
+        raise TtsOutputValidationError from exc
+
+
+def validate_wav_bytes(audio: bytes, *, sample_rate: int | None, channels: int) -> None:
+    """Check in-memory replay audio without writing another temporary file."""
+    if not 0 < len(audio) <= MAX_AUDIO_BYTES:
+        raise TtsOutputValidationError
+    try:
         with wave.open(io.BytesIO(audio), "rb") as wav:
             if (
                 wav.getcomptype() != "NONE"
                 or wav.getnchannels() != channels
                 or wav.getsampwidth() != 2
-                or wav.getframerate() != sample_rate
+                or not 8_000 <= wav.getframerate() <= 192_000
+                or (sample_rate is not None and wav.getframerate() != sample_rate)
                 or wav.getnframes() <= 0
             ):
                 raise TtsOutputValidationError
@@ -36,6 +48,5 @@ def read_validated_wav(path: Path, *, sample_rate: int, channels: int) -> bytes:
                 or len(wav.readframes(wav.getnframes())) != expected_size
             ):
                 raise TtsOutputValidationError
-        return audio
-    except (OSError, EOFError, ValueError, wave.Error) as exc:
+    except (EOFError, ValueError, wave.Error) as exc:
         raise TtsOutputValidationError from exc

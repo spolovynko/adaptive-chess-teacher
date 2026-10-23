@@ -24,6 +24,7 @@ from voicechess.tts import (
     TtsShutdownError,
     TtsStartupError,
     TtsStartupTimeoutError,
+    TtsStorageError,
     TtsSynthesisError,
     TtsTimeoutError,
     TtsUnavailableError,
@@ -126,6 +127,10 @@ class PiperContext:
     factory: FakeProcessFactory
     service: PiperSynthesizer
 
+    def work_files(self) -> list[Path]:
+        directory = self.settings.piper_audio_dir / "voicechess"
+        return list(directory.glob("piper-*"))
+
     def events(self) -> list[dict[str, object]]:
         return [
             json.loads(line)
@@ -163,7 +168,10 @@ def test_start_is_bounded_and_idempotent(context: PiperContext) -> None:
     assert context.factory.commands == [["fake piper", "--help"]]
     assert context.factory.process.inputs == [(None, 5.0)]
     events = context.events()
-    assert [event["event"] for event in events] == ["piper_starting", "piper_started"]
+    assert [event["event"] for event in events if str(event["event"]).startswith("piper_")] == [
+        "piper_starting",
+        "piper_started",
+    ]
     assert events[-1]["duration_ms"] >= 0
 
 
@@ -257,9 +265,9 @@ def test_synthesis_uses_stdin_and_isolated_local_output(context: PiperContext) -
     assert command[:3] == ["fake piper", "--model", str(context.settings.piper_model_path)]
     assert "Black plays knight f6." not in command
     assert context.factory.process.inputs[-1] == (b"Black plays knight f6.\n", 10.0)
-    assert list(context.settings.piper_audio_dir.iterdir()) == []
+    assert context.work_files() == []
     events = context.events()
-    assert events[-2]["event"] == "piper_synthesis_started"
+    assert any(event["event"] == "piper_synthesis_started" for event in events)
     assert events[-1]["event"] == "piper_synthesis_completed"
     assert events[-1]["game_id"] == "game-1"
     assert events[-1]["duration_ms"] >= 0
@@ -286,7 +294,7 @@ def test_synthesis_timeout_is_controlled_and_cleans_output(context: PiperContext
         context.service.synthesize("Black plays knight f6.")
     assert caught.value.timeout_ms == 10_000
     assert context.factory.process.terminate_calls == 1
-    assert list(context.settings.piper_audio_dir.iterdir()) == []
+    assert context.work_files() == []
 
 
 @pytest.mark.parametrize("failure", ["spawn", "exit", "stdin"])
@@ -300,7 +308,7 @@ def test_synthesis_process_failures_are_controlled(context: PiperContext, failur
         context.factory.process.error = BrokenPipeError("private local path")
     with pytest.raises(TtsSynthesisError):
         context.service.synthesize("Black plays knight f6.", game_id="game-1")
-    assert list(context.settings.piper_audio_dir.iterdir()) == []
+    assert context.work_files() == []
     assert context.events()[-1]["event"] == "piper_synthesis_failed"
     assert "private local path" not in context.settings.log_destination.read_text(encoding="utf-8")
 
@@ -325,7 +333,7 @@ def test_missing_or_invalid_wav_is_rejected_and_cleaned(
     context.factory.process.output = output
     with pytest.raises(TtsOutputValidationError):
         context.service.synthesize("Black plays knight f6.")
-    assert list(context.settings.piper_audio_dir.iterdir()) == []
+    assert context.work_files() == []
     assert context.events()[-1]["event"] == "piper_synthesis_failed"
 
 
@@ -334,7 +342,7 @@ def test_oversized_wav_is_rejected(context: PiperContext, monkeypatch: pytest.Mo
     monkeypatch.setattr("voicechess.tts.audio.MAX_AUDIO_BYTES", 64)
     with pytest.raises(TtsOutputValidationError):
         context.service.synthesize("Black plays knight f6.")
-    assert list(context.settings.piper_audio_dir.iterdir()) == []
+    assert context.work_files() == []
 
 
 def test_validation_failure_does_not_poison_a_later_synthesis(context: PiperContext) -> None:
@@ -380,9 +388,7 @@ def test_stop_interrupts_active_work_without_waiting_for_operation_timeout(
     assert not context.service.is_ready
     assert process.terminate_calls == 1
     assert process.close_calls >= 1
-    assert not context.settings.piper_audio_dir.exists() or not list(
-        context.settings.piper_audio_dir.iterdir()
-    )
+    assert context.work_files() == []
     assert not any(event["event"] == "piper_synthesis_completed" for event in context.events())
 
 
@@ -437,7 +443,8 @@ def test_unrelated_output_is_preserved(context: PiperContext) -> None:
     context.service.start()
     context.service.synthesize("Black plays knight f6.")
     context.service.stop()
-    assert list(context.settings.piper_audio_dir.iterdir()) == [unrelated]
+    assert unrelated.is_file()
+    assert context.work_files() == []
     assert unrelated.read_text(encoding="utf-8") == "keep me"
 
 
@@ -466,15 +473,14 @@ def test_atomic_publish_failure_is_controlled_and_cleans_partial_audio(
     monkeypatch.setattr(Path, "replace", fail_replace)
     with pytest.raises(TtsSynthesisError):
         context.service.synthesize("Black plays knight f6.")
-    assert list(context.settings.piper_audio_dir.iterdir()) == []
+    assert context.work_files() == []
 
 
 def test_output_directory_failure_is_controlled(context: PiperContext) -> None:
     context.settings.piper_audio_dir.write_text("not a directory", encoding="utf-8")
-    context.service.start()
-    with pytest.raises(TtsSynthesisError):
-        context.service.synthesize("Black plays knight f6.")
-    assert len(context.factory.commands) == 1
+    with pytest.raises(TtsStartupError):
+        context.service.start()
+    assert len(context.factory.commands) == 0
 
 
 def test_utf8_text_is_sent_as_data(context: PiperContext) -> None:
@@ -513,7 +519,7 @@ def test_real_subprocess_adapter_with_fake_tts_cli(
         else:
             with pytest.raises(error_type):
                 service.synthesize(text)
-        assert list(context.settings.piper_audio_dir.iterdir()) == []
+        assert context.work_files() == []
     finally:
         service.stop()
 
@@ -544,4 +550,25 @@ def test_shutdown_cleanup_timeout_is_retryable_after_worker_finishes(
             task.result(timeout=2)
     context.service.stop()
     assert context.events()[-1]["event"] == "piper_stopped"
-    assert list(context.settings.piper_audio_dir.iterdir()) == []
+    assert context.work_files() == []
+
+
+def test_cleanup_failure_blocks_synthesis_until_explicit_start_retry(
+    context: PiperContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context.service.start()
+
+    def fail_unlink(path: Path, missing_ok: bool = False) -> None:
+        raise PermissionError("private local path")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", fail_unlink)
+        with pytest.raises(TtsStorageError):
+            context.service.synthesize("Black plays knight f6.")
+        assert not context.service.is_ready
+        with pytest.raises(TtsUnavailableError):
+            context.service.synthesize("Black plays pawn to e5.")
+        assert len(context.work_files()) == 1
+    context.service.start()
+    assert context.service.synthesize("Black plays pawn to e5.") == wav_audio()
+    assert context.work_files() == []

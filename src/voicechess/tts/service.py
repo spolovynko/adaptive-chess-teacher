@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-import tempfile
 from pathlib import Path
 from threading import Lock, RLock
 from time import perf_counter
@@ -18,11 +17,14 @@ from voicechess.tts.errors import (
     TtsShutdownError,
     TtsStartupError,
     TtsStartupTimeoutError,
+    TtsStorageError,
     TtsSynthesisError,
     TtsTimeoutError,
     TtsUnavailableError,
 )
+from voicechess.tts.models import MAX_ANNOUNCEMENT_TEXT_CHARS
 from voicechess.tts.process import PiperProcess, ProcessFactory, open_piper_process
+from voicechess.tts.workspace import AudioWorkspace
 
 
 class PiperSynthesizer:
@@ -49,7 +51,7 @@ class PiperSynthesizer:
         self._active: PiperProcess | None = None
         self._model: Path | None = None
         self._sample_rate: int | None = None
-        self._audio_dir = settings.piper_audio_dir.resolve()
+        self._workspace = AudioWorkspace(audio_dir=settings.piper_audio_dir, logger=logger)
 
     @property
     def is_ready(self) -> bool:
@@ -70,6 +72,7 @@ class PiperSynthesizer:
                         raise TtsStartupError
                     self._stopping = False
                     self._stop_complete = False
+                self._workspace.start()
                 model, sample_rate = self._validate_model()
                 self._run(
                     [self._settings.piper_path, "--help"],
@@ -109,7 +112,11 @@ class PiperSynthesizer:
             model, sample_rate = self._model, self._sample_rate
             if not self.is_ready or model is None or sample_rate is None:
                 error: TtsError | None = TtsUnavailableError()
-            elif not text.strip() or len(text) > 4_096 or any(c in text for c in "\r\n\0"):
+            elif (
+                not text.strip()
+                or len(text) > MAX_ANNOUNCEMENT_TEXT_CHARS
+                or any(c in text for c in "\r\n\0")
+            ):
                 error = TtsSynthesisError()
             else:
                 error = None
@@ -128,9 +135,8 @@ class PiperSynthesizer:
             started_at = perf_counter()
             log_event(self._logger, logging.INFO, "piper_synthesis_started", game_id=game_id)
             try:
-                self._audio_dir.mkdir(parents=True, exist_ok=True)
-                with tempfile.TemporaryDirectory(prefix="piper-", dir=self._audio_dir) as work_dir:
-                    output = Path(work_dir) / "speech.partial.wav"
+                with self._workspace.work_directory(game_id=game_id) as work_dir:
+                    output = work_dir / "speech.partial.wav"
                     self._run(
                         [
                             self._settings.piper_path,
@@ -155,6 +161,9 @@ class PiperSynthesizer:
                         raise TtsUnavailableError
             except Exception as exc:
                 error = exc if isinstance(exc, TtsError) else TtsSynthesisError()
+                if isinstance(error, TtsStorageError):
+                    with self._state_lock:
+                        self._ready = False
                 log_event(
                     self._logger,
                     logging.WARNING,
@@ -197,6 +206,7 @@ class PiperSynthesizer:
                 if not acquired:
                     raise TtsShutdownError
                 self._operation_lock.release()
+                self._workspace.stop()
                 with self._state_lock:
                     self._active = None
                     self._stop_complete = True

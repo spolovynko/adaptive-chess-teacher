@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 from uuid import UUID
 
+# Engine announcements are short; bound input before requesting synthesis or retention.
+MAX_ANNOUNCEMENT_TEXT_CHARS = 4_096
+
 
 class AnnouncementStatus(StrEnum):
     """Availability of one engine-move announcement."""

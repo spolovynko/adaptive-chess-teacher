@@ -13,6 +13,7 @@ from voicechess.tts import (
     TtsShutdownError,
     TtsStartupError,
     TtsStartupTimeoutError,
+    TtsStorageError,
     TtsSynthesisError,
     TtsTimeoutError,
     TtsUnavailableError,
@@ -29,6 +30,7 @@ from voicechess.tts import (
         (TtsOutputValidationError(), "Generated speech audio is invalid."),
         (TtsUnavailableError(), "The engine move announcement is unavailable."),
         (TtsShutdownError(), "Local speech could not be stopped cleanly."),
+        (TtsStorageError(), "Local speech audio could not be managed."),
     ],
 )
 def test_tts_errors_have_safe_stable_messages(error: TtsError, message: str) -> None:

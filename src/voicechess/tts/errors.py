@@ -61,3 +61,10 @@ class TtsShutdownError(TtsError):
 
     def __init__(self) -> None:
         super().__init__("Local speech could not be stopped cleanly.")
+
+
+class TtsStorageError(TtsError):
+    """Raised when private speech work files cannot be managed safely."""
+
+    def __init__(self) -> None:
+        super().__init__("Local speech audio could not be managed.")

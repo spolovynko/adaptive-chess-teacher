@@ -170,11 +170,26 @@ when set, it must match the model. Each CLI invocation loads the model again, so
 synthesis duration is logged separately from the later playback latency measurement.
 See the [Piper CLI documentation](https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/CLI.md).
 
-Each synthesis uses a private work directory inside the configured audio directory,
-validates output, atomically renames it, reads the bytes, and removes the work directory.
-Files over 16 MiB are rejected. Normal failures and timeouts also clean up private
-output; unrelated files are preserved. Crash recovery and latest-per-game retention
-are planned for Step 4, so the retention setting is not yet active.
+Each synthesis uses a private `piper-<UUID>` work directory under
+`<audio-dir>/voicechess/`, validates output, atomically renames it, reads the bytes, and
+removes its known WAV files and work directory. Files over 16 MiB are rejected. Startup
+acquires exclusive ownership of this namespace and removes recognized abandoned work
+directories. A second instance sharing that audio directory fails safely before cleanup;
+use separate audio directories to run independent instances. The small `.lock` file
+remains and its operating-system lock releases when the owner exits.
+
+The internal `AnnouncementStore` implements `latest_per_game` retention for one active
+game: it keeps only the current announcement's validated WAV bytes in memory, up to
+16 MiB, with no replay history written to disk. A new announcement discards the previous
+replay immediately; game replacement/invalidation and store clearing discard all replay
+bytes. Old-game, superseded, and duplicate results cannot replace current audio. These
+operations are tested but are not yet connected to the browser or game routes.
+
+Unrelated files and unrecognized older-format work directories are preserved. Cleanup
+does not traverse directory links or recursively delete unknown contents. If cleanup
+fails, new synthesis is blocked until explicit startup recovery succeeds; a controlled
+failure can leave an inaccessible file for later recovery. The default `audio/` directory
+is Git-ignored, so generated audio is excluded from commits.
 
 Shutdown interrupts active work, requests termination, escalates to kill, and waits
 for child reaping and request cleanup. The shutdown setting bounds each wait separately;
