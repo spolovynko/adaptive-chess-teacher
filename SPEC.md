@@ -191,8 +191,11 @@ unavailable. No audio or coaching.
 *Done when:* a full game is playable through the localhost browser interface, failures
 do not corrupt state, structured timings are present, and exports round-trip as PGN.
 
-**Phase 1 — Output voice.** Pipe the engine's move through Piper. User still types.
-*Done when:* every engine move is spoken, first audio within 300 ms.
+**Phase 1 — Output voice.** Convert canonical engine SAN into spoken text and generate
+audio locally through Piper. The player continues using manual board input.
+*Done when:* every successful engine reply can be spoken, speech failure leaves a valid
+turn intact, and playback begins within 300 ms of audio becoming available under normal
+local conditions.
 
 **Phase 2 — Transcription harness.** Add `faster-whisper` with push-to-talk. Do **not**
 write the resolver yet. Log every raw transcript with the board FEN to `transcripts.jsonl`.

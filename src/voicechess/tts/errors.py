@@ -5,6 +5,13 @@ class TtsError(RuntimeError):
     """Base exception for local text-to-speech failures."""
 
 
+class TtsAnnouncementError(TtsError):
+    """Raised when engine notation cannot be converted into an announcement."""
+
+    def __init__(self) -> None:
+        super().__init__("The engine move could not be converted into speech text.")
+
+
 class TtsStartupError(TtsError):
     """Raised when the text-to-speech service cannot start."""
 

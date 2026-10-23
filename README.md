@@ -160,6 +160,12 @@ The output and retention settings define the intended service configuration; the
 not yet generate or clean up audio. The expected sample rate is optional because voice
 models can have different native rates.
 
+The Phase 1 text formatter is implemented as `voicechess.tts.format_engine_move()`.
+It converts canonical engine SAN into announcement text, such as `Nf6` to "Black plays
+knight f6." It covers captures, check, checkmate, castling, promotions, and source
+disambiguation. Callers must supply SAN validated by `python-chess`; the formatter
+does not check legality. Game integration and audible announcements are still pending.
+
 ## Phase 0 game rules
 
 The player controls White and Stockfish controls Black. Checkmate, stalemate,
