@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     piper_model_path: Path | None = None
     piper_startup_timeout_ms: int = Field(default=5_000, ge=100, le=120_000)
     piper_synthesis_timeout_ms: int = Field(default=10_000, ge=100, le=120_000)
+    piper_shutdown_timeout_ms: int = Field(default=1_000, ge=100, le=10_000)
     piper_audio_dir: Path = Path("audio")
     piper_output_format: Literal["wav"] = "wav"
     piper_output_channels: int = Field(default=1, ge=1, le=1)

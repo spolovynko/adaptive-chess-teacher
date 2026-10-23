@@ -12,6 +12,7 @@ from voicechess.tts import (
     TtsOutputValidationError,
     TtsShutdownError,
     TtsStartupError,
+    TtsStartupTimeoutError,
     TtsSynthesisError,
     TtsTimeoutError,
     TtsUnavailableError,
@@ -22,6 +23,7 @@ from voicechess.tts import (
     ("error", "message"),
     [
         (TtsStartupError(), "Local speech could not be started."),
+        (TtsStartupTimeoutError(500), "Local speech startup timed out."),
         (TtsSynthesisError(), "The engine move could not be spoken."),
         (TtsTimeoutError(750), "Speech generation timed out."),
         (TtsOutputValidationError(), "Generated speech audio is invalid."),

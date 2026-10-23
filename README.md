@@ -142,7 +142,8 @@ Reserved, currently unused settings are available for future phases:
 `VOICECHESS_WHISPER_MODEL_NAME`, `VOICECHESS_LOCAL_LLM_MODEL_NAME`, and the three
 `VOICECHESS_COACHING_*_THRESHOLD_CP` values.
 
-Phase 1 Piper settings are defined but are not yet connected to a speech service:
+Phase 1 includes an internal Piper synthesizer; integration with game turns and browser
+playback is still pending. Its centrally configured settings are:
 
 | Setting | Environment variable | Default |
 | --- | --- | --- |
@@ -150,15 +151,35 @@ Phase 1 Piper settings are defined but are not yet connected to a speech service
 | Local ONNX voice model | `VOICECHESS_PIPER_MODEL_PATH` | unset |
 | Piper startup timeout, milliseconds | `VOICECHESS_PIPER_STARTUP_TIMEOUT_MS` | `5000` |
 | Synthesis timeout, milliseconds | `VOICECHESS_PIPER_SYNTHESIS_TIMEOUT_MS` | `10000` |
+| Shutdown wait, milliseconds | `VOICECHESS_PIPER_SHUTDOWN_TIMEOUT_MS` | `1000` |
 | Managed temporary audio directory | `VOICECHESS_PIPER_AUDIO_DIR` | `audio` |
 | Output format | `VOICECHESS_PIPER_OUTPUT_FORMAT` | `wav` |
 | Output channels | `VOICECHESS_PIPER_OUTPUT_CHANNELS` | `1` |
 | Expected sample rate, Hz | `VOICECHESS_PIPER_EXPECTED_SAMPLE_RATE_HZ` | unset |
 | Retention policy | `VOICECHESS_PIPER_RETENTION_POLICY` | `latest_per_game` |
 
-The output and retention settings define the intended service configuration; they do
-not yet generate or clean up audio. The expected sample rate is optional because voice
-models can have different native rates.
+`PiperSynthesizer` requires a locally installed Piper CLI, a local ONNX voice model,
+and its companion `<model>.onnx.json` file. No model download happens at runtime. A
+startup preflight checks the files, native sample rate, and bounded executable probe;
+the first synthesis actually loads the model. This project does not yet install Piper
+or invoke it from `uv run voicechess`.
+
+The synthesizer sends text over stdin and returns validated, nonempty mono 16-bit PCM
+WAV bytes at the model's native rate. The expected sample-rate override is optional;
+when set, it must match the model. Each CLI invocation loads the model again, so its
+synthesis duration is logged separately from the later playback latency measurement.
+See the [Piper CLI documentation](https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/CLI.md).
+
+Each synthesis uses a private work directory inside the configured audio directory,
+validates output, atomically renames it, reads the bytes, and removes the work directory.
+Files over 16 MiB are rejected. Normal failures and timeouts also clean up private
+output; unrelated files are preserved. Crash recovery and latest-per-game retention
+are planned for Step 4, so the retention setting is not yet active.
+
+Shutdown interrupts active work, requests termination, escalates to kill, and waits
+for child reaping and request cleanup. The shutdown setting bounds each wait separately;
+an escalation can take more than one wait interval. Controlled failures and synthesis
+timings are recorded without raw process diagnostics or speech text.
 
 The Phase 1 text formatter is implemented as `voicechess.tts.format_engine_move()`.
 It converts canonical engine SAN into announcement text, such as `Nf6` to "Black plays

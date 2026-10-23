@@ -20,6 +20,7 @@ def isolate_tests_from_project_dotenv(
         "PIPER_MODEL_PATH",
         "PIPER_STARTUP_TIMEOUT_MS",
         "PIPER_SYNTHESIS_TIMEOUT_MS",
+        "PIPER_SHUTDOWN_TIMEOUT_MS",
         "PIPER_AUDIO_DIR",
         "PIPER_OUTPUT_FORMAT",
         "PIPER_OUTPUT_CHANNELS",
@@ -98,6 +99,7 @@ def test_piper_defaults_do_not_require_an_installed_model() -> None:
     assert settings.piper_model_path is None
     assert settings.piper_startup_timeout_ms == 5_000
     assert settings.piper_synthesis_timeout_ms == 10_000
+    assert settings.piper_shutdown_timeout_ms == 1_000
     assert settings.piper_audio_dir == Path("audio")
     assert settings.piper_output_format == "wav"
     assert settings.piper_output_channels == 1
@@ -115,6 +117,7 @@ def test_piper_settings_can_be_overridden_through_environment(
     monkeypatch.setenv("VOICECHESS_PIPER_MODEL_PATH", str(model))
     monkeypatch.setenv("VOICECHESS_PIPER_STARTUP_TIMEOUT_MS", "2000")
     monkeypatch.setenv("VOICECHESS_PIPER_SYNTHESIS_TIMEOUT_MS", "3000")
+    monkeypatch.setenv("VOICECHESS_PIPER_SHUTDOWN_TIMEOUT_MS", "500")
     monkeypatch.setenv("VOICECHESS_PIPER_AUDIO_DIR", str(audio_dir))
     monkeypatch.setenv("VOICECHESS_PIPER_OUTPUT_FORMAT", "wav")
     monkeypatch.setenv("VOICECHESS_PIPER_OUTPUT_CHANNELS", "1")
@@ -127,6 +130,7 @@ def test_piper_settings_can_be_overridden_through_environment(
     assert settings.piper_model_path == model
     assert settings.piper_startup_timeout_ms == 2_000
     assert settings.piper_synthesis_timeout_ms == 3_000
+    assert settings.piper_shutdown_timeout_ms == 500
     assert settings.piper_audio_dir == audio_dir
     assert settings.piper_output_format == "wav"
     assert settings.piper_output_channels == 1
@@ -139,6 +143,12 @@ def test_piper_settings_can_be_overridden_through_environment(
 def test_piper_timeouts_must_be_bounded(field: str, value: int) -> None:
     with pytest.raises(ValidationError):
         Settings(**{field: value})
+
+
+@pytest.mark.parametrize("value", [0, 99, 10_001])
+def test_piper_shutdown_wait_must_be_bounded(value: int) -> None:
+    with pytest.raises(ValidationError):
+        Settings(piper_shutdown_timeout_ms=value)
 
 
 @pytest.mark.parametrize("value", [7_999, 192_001])

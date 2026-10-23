@@ -26,6 +26,14 @@ class TtsSynthesisError(TtsError):
         super().__init__("The engine move could not be spoken.")
 
 
+class TtsStartupTimeoutError(TtsStartupError):
+    """Raised when the Piper startup probe exceeds its deadline."""
+
+    def __init__(self, timeout_ms: int) -> None:
+        self.timeout_ms = timeout_ms
+        TtsError.__init__(self, "Local speech startup timed out.")
+
+
 class TtsTimeoutError(TtsSynthesisError):
     """Raised when speech synthesis exceeds its deadline."""
 
