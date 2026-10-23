@@ -139,9 +139,26 @@ invalid engine cannot affect later turns; the application can then start a fresh
 process.
 
 Reserved, currently unused settings are available for future phases:
-`VOICECHESS_WHISPER_MODEL_NAME`, `VOICECHESS_PIPER_VOICE_NAME`,
-`VOICECHESS_LOCAL_LLM_MODEL_NAME`, and the three `VOICECHESS_COACHING_*_THRESHOLD_CP`
-values.
+`VOICECHESS_WHISPER_MODEL_NAME`, `VOICECHESS_LOCAL_LLM_MODEL_NAME`, and the three
+`VOICECHESS_COACHING_*_THRESHOLD_CP` values.
+
+Phase 1 Piper settings are defined but are not yet connected to a speech service:
+
+| Setting | Environment variable | Default |
+| --- | --- | --- |
+| Piper executable | `VOICECHESS_PIPER_PATH` | `piper` |
+| Local ONNX voice model | `VOICECHESS_PIPER_MODEL_PATH` | unset |
+| Piper startup timeout, milliseconds | `VOICECHESS_PIPER_STARTUP_TIMEOUT_MS` | `5000` |
+| Synthesis timeout, milliseconds | `VOICECHESS_PIPER_SYNTHESIS_TIMEOUT_MS` | `10000` |
+| Managed temporary audio directory | `VOICECHESS_PIPER_AUDIO_DIR` | `audio` |
+| Output format | `VOICECHESS_PIPER_OUTPUT_FORMAT` | `wav` |
+| Output channels | `VOICECHESS_PIPER_OUTPUT_CHANNELS` | `1` |
+| Expected sample rate, Hz | `VOICECHESS_PIPER_EXPECTED_SAMPLE_RATE_HZ` | unset |
+| Retention policy | `VOICECHESS_PIPER_RETENTION_POLICY` | `latest_per_game` |
+
+The output and retention settings define the intended service configuration; they do
+not yet generate or clean up audio. The expected sample rate is optional because voice
+models can have different native rates.
 
 ## Phase 0 game rules
 

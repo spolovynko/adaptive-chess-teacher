@@ -220,6 +220,7 @@ __marimo__/
 # Adaptive Chess Teacher local runtime output
 logs/
 exports/
+audio/
 *.pgn
 
 # Local planning documents
